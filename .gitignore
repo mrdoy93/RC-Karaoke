@@ -1,0 +1,16 @@
+*.iml
+.gradle/
+/local.properties
+/.idea/
+/build/
+/captures/
+.externalNativeBuild/
+.cxx/
+app/build/
+app/src/main/assets/songs.kpack
+/songs/
+/Background/
+/*.zip
+*.apk
+*.aab
+/artwork/browser_remote_preview*.png

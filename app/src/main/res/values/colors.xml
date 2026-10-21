@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="night">#070B16</color>
+    <color name="surface">#11192C</color>
+    <color name="surface_high">#182440</color>
+    <color name="stroke">#2A3A5D</color>
+    <color name="white">#F8FAFF</color>
+    <color name="muted">#AAB6D0</color>
+    <color name="violet">#9A3CFF</color>
+    <color name="blue">#2F8CFF</color>
+    <color name="dark_blue">#00008B</color>
+    <color name="cyan">#4FE4FF</color>
+    <color name="pink">#FF4EB8</color>
+    <color name="gold">#FFC64D</color>
+    <color name="launcher_background">#050505</color>
+</resources>
