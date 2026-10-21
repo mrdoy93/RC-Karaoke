@@ -28,12 +28,15 @@ internal data class RemoteQueueStatus(val queueSize: Int, val queueLimit: Int)
 
 internal data class RemoteReservationResult(val accepted: Boolean, val message: String)
 
+internal data class RemoteControlResult(val accepted: Boolean, val message: String)
+
 /** A dependency-free HTTP server used only on the device's local network. */
 internal class BrowserRemoteServer(
     private val catalog: List<RemoteCatalogSong>,
     private val port: Int,
     private val statusProvider: () -> RemoteQueueStatus,
-    private val reservationHandler: (String) -> RemoteReservationResult
+    private val reservationHandler: (String) -> RemoteReservationResult,
+    private val controlHandler: (String) -> RemoteControlResult
 ) {
     private val workers = Executors.newCachedThreadPool()
     @Volatile private var running = false
@@ -130,6 +133,18 @@ internal class BrowserRemoteServer(
                 request.method == "POST" && path == "/api/reserve" -> {
                     val number = parseForm(request.body)["number"].orEmpty().trim()
                     val result = reservationHandler(number)
+                    val status = statusProvider()
+                    val json = JSONObject()
+                        .put("ok", result.accepted)
+                        .put("message", result.message)
+                        .put("queueSize", status.queueSize)
+                        .put("queueLimit", status.queueLimit)
+                        .toString()
+                    writeResponse(socket, if (result.accepted) 200 else 409, "application/json; charset=utf-8", json)
+                }
+                request.method == "POST" && path == "/api/control" -> {
+                    val action = parseForm(request.body)["action"].orEmpty().trim().lowercase(Locale.ROOT)
+                    val result = controlHandler(action)
                     val status = statusProvider()
                     val json = JSONObject()
                         .put("ok", result.accepted)
@@ -281,14 +296,20 @@ internal class BrowserRemoteServer(
                 .status{display:flex;justify-content:space-between;gap:10px;align-items:center;background:linear-gradient(135deg,#122343,#17172f);border:1px solid #29436c;border-radius:16px;padding:12px 14px;margin-bottom:14px;box-shadow:0 14px 35px #0006}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#43f0a6;box-shadow:0 0 12px #43f0a6;margin-right:7px}.count{color:var(--cyan);font-weight:800}
                 .search{width:100%;height:54px;border-radius:16px;border:1px solid #36507c;background:#101a31;color:#fff;padding:0 17px;font-size:17px;outline:none;box-shadow:inset 0 0 0 1px #0004}.search:focus{border-color:var(--cyan);box-shadow:0 0 0 3px #32d9ff22}.hint{color:var(--muted);font-size:13px;margin:10px 3px 14px}
                 .songs{display:grid;gap:10px}.song{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:13px;background:linear-gradient(120deg,#111c35,#15172e);border:1px solid #293d62;border-radius:16px}.num{font-size:12px;color:var(--cyan);font-weight:900;background:#0a2940;padding:7px;border-radius:9px}.title{font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.artist{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px}
-                button{border:0;border-radius:12px;color:#fff;font-weight:900;font-size:20px;width:46px;height:46px;background:linear-gradient(135deg,var(--violet),var(--blue));box-shadow:0 8px 20px #3d47e955}button:disabled{opacity:.4}.message{text-align:center;color:var(--muted);padding:28px 8px}.toast{position:fixed;left:50%;bottom:25px;transform:translateX(-50%) translateY(90px);opacity:0;transition:.25s;background:#14213d;border:1px solid #3c5c8e;border-radius:14px;padding:12px 18px;max-width:90%;text-align:center;box-shadow:0 12px 30px #0009}.toast.show{transform:translateX(-50%) translateY(0);opacity:1}.toast.good{border-color:#38dc9c}.toast.bad{border-color:#ff4b86}
-                @media(max-width:440px){.hero{font-size:26px}.song{grid-template-columns:auto minmax(0,1fr) auto;padding:11px}.num{font-size:11px;padding:6px 5px}}
+                button{border:0;border-radius:12px;color:#fff;font-weight:900;font-size:20px;width:46px;height:46px;background:linear-gradient(135deg,var(--violet),var(--blue));box-shadow:0 8px 20px #3d47e955}button:disabled{opacity:.4}.controls{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:0 0 14px}.control{width:100%;height:46px;padding:0 8px;font-size:13px;white-space:nowrap}.control.finish{background:linear-gradient(135deg,#e03068,#ff4b86)}.message{text-align:center;color:var(--muted);padding:28px 8px}.toast{position:fixed;left:50%;bottom:25px;transform:translateX(-50%) translateY(90px);opacity:0;transition:.25s;background:#14213d;border:1px solid #3c5c8e;border-radius:14px;padding:12px 18px;max-width:90%;text-align:center;box-shadow:0 12px 30px #0009}.toast.show{transform:translateX(-50%) translateY(0);opacity:1}.toast.good{border-color:#38dc9c}.toast.bad{border-color:#ff4b86}
+                @media(max-width:440px){.hero{font-size:26px}.controls{grid-template-columns:repeat(2,minmax(0,1fr))}.song{grid-template-columns:auto minmax(0,1fr) auto;padding:11px}.num{font-size:11px;padding:6px 5px}}
               </style>
             </head>
             <body><main>
               <div class="brand">RC KARAOKE</div><h1 class="hero">Reserve your next song</h1><p class="sub">Search the offline songbook without interrupting the singer.</p>
               <div class="status"><span><i class="dot"></i>Remote connected</span><span class="count" id="count">Queue -- / --</span></div>
-              <input class="search" id="search" autocomplete="off" placeholder="Song number, title, or artist" autofocus>
+              <div class="controls" aria-label="Playback controls">
+                <button class="control" data-action="restart">&#8634; Restart</button>
+                <button class="control" data-action="pause">&#9208; Pause</button>
+                <button class="control finish" data-action="finish">&#9632; Finish</button>
+                <button class="control" data-action="next">Next &#9654;</button>
+              </div>
+              <input class="search" id="search" autocomplete="off" placeholder="Song number, title, or artist">
               <div class="hint">Type to search, then tap + to reserve.</div><section class="songs" id="songs"><div class="message">Start typing to find a song.</div></section>
             </main><div class="toast" id="toast"></div>
             <script>
@@ -296,9 +317,10 @@ internal class BrowserRemoteServer(
               function status(d){count.textContent='Queue '+d.queueSize+' / '+d.queueLimit}
               function say(message,good){toast.textContent=message;toast.className='toast show '+(good?'good':'bad');clearTimeout(toast.t);toast.t=setTimeout(()=>toast.className='toast',2800)}
               function empty(message){songs.replaceChildren();const e=document.createElement('div');e.className='message';e.textContent=message;songs.append(e)}
+              async function control(action,button){button.disabled=true;try{const response=await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'action='+encodeURIComponent(action)});const data=await response.json();status(data);say(data.message,data.ok)}catch(e){say('The karaoke remote is unavailable.',false)}finally{button.disabled=false}}
               function row(song){const card=document.createElement('article');card.className='song';const number=document.createElement('span');number.className='num';number.textContent=song.number;const info=document.createElement('div');const title=document.createElement('div');title.className='title';title.textContent=song.title;const artist=document.createElement('div');artist.className='artist';artist.textContent=song.artist;info.append(title,artist);const add=document.createElement('button');add.textContent='+';add.setAttribute('aria-label','Reserve '+song.title);add.onclick=async()=>{add.disabled=true;try{const response=await fetch('/api/reserve',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'number='+encodeURIComponent(song.number)});const data=await response.json();status(data);say(data.message,data.ok)}catch(e){say('The karaoke remote is unavailable.',false)}finally{add.disabled=false}};card.append(number,info,add);return card}
               async function find(){const q=search.value.trim();if(!q){empty('Start typing to find a song.');return}try{const response=await fetch('/api/search?q='+encodeURIComponent(q));const data=await response.json();status(data);songs.replaceChildren();if(!data.songs.length){empty('No matching songs found.');return}data.songs.forEach(song=>songs.append(row(song)))}catch(e){empty('Connection lost. Check the main karaoke device.')}}
-              search.addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(find,220)});fetch('/api/status').then(r=>r.json()).then(status).catch(()=>say('Cannot reach the karaoke device.',false));
+              document.querySelectorAll('.control').forEach(button=>button.addEventListener('click',()=>control(button.dataset.action,button)));search.addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(find,220)});fetch('/api/status').then(r=>r.json()).then(status).catch(()=>say('Cannot reach the karaoke device.',false));
             </script></body></html>
         """.trimIndent()
     }

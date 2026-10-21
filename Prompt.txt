@@ -1,0 +1,12 @@
+When Swipe Panel is close put a keyboard icon on the right side center to tap and open the swipe panel and disappear when swipe panel is open return when closes 
+
+
+On Search Title on the swipe put the scrollable title list on the bottom before searching and replace the preview title when searching 
+
+
+On Search make a small compact keboard only not so wide 
+
+
+On Web based remote Add also a Volume Control
+
+ Make the background popup thumbnail 3 Columns

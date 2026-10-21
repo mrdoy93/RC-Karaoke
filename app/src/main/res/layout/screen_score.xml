@@ -6,13 +6,13 @@
     android:background="@drawable/bg_stage"
     android:gravity="center"
     android:orientation="vertical"
-    android:padding="18dp">
+    android:padding="10dp">
 
     <TextView
         android:layout_width="match_parent"
-        android:layout_height="36dp"
-        android:autoSizeMaxTextSize="28sp"
-        android:autoSizeMinTextSize="20sp"
+        android:layout_height="30dp"
+        android:autoSizeMaxTextSize="24sp"
+        android:autoSizeMinTextSize="16sp"
         android:autoSizeStepGranularity="1sp"
         android:autoSizeTextType="uniform"
         android:fontFamily="sans-serif-black"
@@ -28,7 +28,7 @@
 
     <TextView
         android:layout_width="match_parent"
-        android:layout_height="18dp"
+        android:layout_height="16dp"
         android:gravity="center"
         android:letterSpacing="0.16"
         android:maxLines="1"
@@ -40,15 +40,15 @@
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="210dp"
-        android:layout_marginTop="8dp"
+        android:layout_height="160dp"
+        android:layout_marginTop="6dp"
         android:baselineAligned="false"
         android:gravity="center"
         android:orientation="horizontal">
 
         <LinearLayout
             android:layout_width="0dp"
-            android:layout_height="150dp"
+            android:layout_height="130dp"
             android:layout_weight="1"
             android:background="@drawable/bg_score_metric_pitch"
             android:elevation="5dp"
@@ -97,10 +97,10 @@
 
         <FrameLayout
             android:id="@+id/scoreMedallion"
-            android:layout_width="184dp"
-            android:layout_height="184dp"
-            android:layout_marginStart="18dp"
-            android:layout_marginEnd="18dp"
+            android:layout_width="150dp"
+            android:layout_height="150dp"
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="12dp"
             android:background="@drawable/bg_score_circle"
             android:elevation="12dp">
 
@@ -109,7 +109,7 @@
                 android:layout_height="match_parent"
                 android:gravity="center"
                 android:orientation="vertical"
-                android:padding="20dp">
+                android:padding="14dp">
 
                 <TextView
                     android:layout_width="match_parent"
@@ -126,7 +126,7 @@
                 <TextView
                     android:id="@+id/totalScore"
                     android:layout_width="match_parent"
-                    android:layout_height="82dp"
+                    android:layout_height="62dp"
                     android:fontFamily="sans-serif-black"
                     android:gravity="center"
                     android:maxLines="1"
@@ -137,7 +137,7 @@
                     android:singleLine="true"
                     android:text="87"
                     android:textColor="@color/white"
-                    android:textSize="58sp" />
+                    android:textSize="46sp" />
 
                 <TextView
                     android:layout_width="match_parent"
@@ -154,7 +154,7 @@
 
         <LinearLayout
             android:layout_width="0dp"
-            android:layout_height="150dp"
+            android:layout_height="130dp"
             android:layout_weight="1"
             android:gravity="center"
             android:orientation="vertical">
@@ -244,7 +244,7 @@
     <TextView
         android:id="@+id/scoredSongTitle"
         android:layout_width="match_parent"
-        android:layout_height="46dp"
+        android:layout_height="40dp"
         android:layout_marginStart="30dp"
         android:layout_marginEnd="30dp"
         android:layout_marginTop="4dp"
@@ -265,10 +265,10 @@
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="54dp"
+        android:layout_height="44dp"
         android:layout_marginStart="20dp"
         android:layout_marginEnd="20dp"
-        android:layout_marginTop="12dp"
+        android:layout_marginTop="7dp"
         android:orientation="horizontal"
         android:weightSum="3.15">
 

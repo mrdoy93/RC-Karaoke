@@ -1,23 +1,30 @@
 package com.example.offlinekaraoke
 
+import android.animation.ValueAnimator
+import android.animation.ObjectAnimator
 import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Typeface
+import android.net.Uri
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.MediaPlayer
+import android.media.MediaMetadataRetriever
 import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.OpenableColumns
 import android.text.Editable
 import android.text.SpannableString
 import android.text.Spanned
@@ -25,29 +32,39 @@ import android.text.TextUtils
 import android.text.TextWatcher
 import android.text.style.ForegroundColorSpan
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
+import android.view.animation.LinearInterpolator
 import android.widget.AbsListView
 import android.widget.BaseAdapter
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ListView
+import android.widget.RadioButton
 import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import android.widget.ViewFlipper
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.EncodeHintType
+import com.google.zxing.qrcode.QRCodeWriter
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
 import java.util.Locale
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import java.util.zip.GZIPInputStream
@@ -96,7 +113,6 @@ class MainActivity : Activity() {
     private lateinit var songAdapter: SongAdapter
     private lateinit var queueList: LinearLayout
     private lateinit var queueBadge: TextView
-    private lateinit var playerQueueBadge: TextView
     private lateinit var songNumberInput: EditText
     private lateinit var searchInput: EditText
     private lateinit var allSongsFilter: TextView
@@ -106,8 +122,13 @@ class MainActivity : Activity() {
     private lateinit var remoteSettingsButton: TextView
 
     private lateinit var playerSongTitle: TextView
+    private lateinit var playerSongTitleContainer: View
+    private lateinit var playerHeaderControls: View
     private lateinit var currentLyric: TextView
+    private lateinit var currentLyricOutline: TextView
     private lateinit var nextLyric: TextView
+    private lateinit var nextLyricOutline: TextView
+    private lateinit var playerProgressControls: View
     private lateinit var songProgress: SeekBar
     private lateinit var elapsedTime: TextView
     private lateinit var totalTime: TextView
@@ -117,6 +138,7 @@ class MainActivity : Activity() {
     private lateinit var micVolumeValue: TextView
     private lateinit var backgroundVideoSurface: SurfaceView
     private lateinit var playerScreen: View
+    private lateinit var playerStage: View
     private lateinit var reservePanel: View
     private lateinit var reservePanelScrim: View
     private lateinit var reserveNumberDisplay: TextView
@@ -153,6 +175,7 @@ class MainActivity : Activity() {
     private var micVolumePercent = 50
     private var mediaPlayer: MediaPlayer? = null
     private var backgroundVideoPlayer: MediaPlayer? = null
+    private var scoreSoundPlayer: MediaPlayer? = null
     private var micAudioRecord: AudioRecord? = null
     private var micAudioTrack: AudioTrack? = null
     private var micMonitorThread: Thread? = null
@@ -160,6 +183,12 @@ class MainActivity : Activity() {
     private var backgroundVideoAssets: List<String> = emptyList()
     private var backgroundVideoSelection = VIDEO_SELECTION_AUTO
     private var selectedBackgroundAsset: String? = null
+    private var customBackgroundVideoUri: Uri? = null
+    private val backgroundThumbnailCache = mutableMapOf<String, Bitmap>()
+    private val backgroundThumbnailLoads = mutableSetOf<String>()
+    private val backgroundThumbnailUnavailable = mutableSetOf<String>()
+    private val backgroundThumbnailLock = Any()
+    private val backgroundThumbnailExecutor = Executors.newSingleThreadExecutor()
     private var videoSurfaceReady = false
     private var timedLyrics: List<MidiLyricsParser.TimedLine> = emptyList()
     private var lyricDisplayIndices: List<Int> = emptyList()
@@ -171,6 +200,8 @@ class MainActivity : Activity() {
     private var playerTouchDownX = 0f
     private var playerTouchDownY = 0f
     private var reservationTitleMode = false
+    private var playerStageResizeAnimator: ValueAnimator? = null
+    private var playerTitleAnimator: ObjectAnimator? = null
     private var activeLibraryFilter = LibraryFilter.ALL
     private var selectedLanguageGroup: SongLanguageGroup? = null
 
@@ -192,8 +223,27 @@ class MainActivity : Activity() {
         }
     }
 
+    private val hidePlayerProgressControls = Runnable {
+        if (::playerProgressControls.isInitialized &&
+            ::screens.isInitialized &&
+            screens.displayedChild == SCREEN_PLAYER &&
+            !songProgress.isPressed
+        ) {
+            playerProgressControls.animate()
+                .alpha(0f)
+                .setDuration(PLAYER_PROGRESS_FADE_MS)
+                .withEndAction {
+                    if (playerProgressControls.alpha == 0f) {
+                        playerProgressControls.visibility = View.INVISIBLE
+                    }
+                }
+                .start()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContentView(R.layout.activity_main)
         window.decorView.systemUiVisibility = (
             View.SYSTEM_UI_FLAG_FULLSCREEN or
@@ -210,6 +260,8 @@ class MainActivity : Activity() {
         songAdapter = SongAdapter(catalog)
         songList.adapter = songAdapter
         songList.setOnItemClickListener { _, _, position, _ ->
+            dismissKeyboard(searchInput)
+            searchInput.clearFocus()
             addToQueue(songAdapter.getItem(position))
         }
 
@@ -223,12 +275,29 @@ class MainActivity : Activity() {
         handler.post(progressTick)
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_CUSTOM_BACKGROUND_VIDEO || resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        val readPermission = data.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION
+        runCatching {
+            contentResolver.takePersistableUriPermission(uri, readPermission)
+        }
+        customBackgroundVideoUri = uri
+        backgroundVideoSelection = VIDEO_SELECTION_CUSTOM
+        getSharedPreferences(LIBRARY_PREFERENCES, MODE_PRIVATE)
+            .edit()
+            .putString(CUSTOM_BACKGROUND_VIDEO_URI_KEY, uri.toString())
+            .putString(BACKGROUND_VIDEO_KEY, VIDEO_SELECTION_CUSTOM)
+            .apply()
+        applyBackgroundVideoSelection()
+    }
+
     private fun bindViews() {
         screens = findViewById(R.id.screenFlipper)
         songList = findViewById(R.id.songList)
         queueList = findViewById(R.id.queueList)
         queueBadge = findViewById(R.id.queueBadge)
-        playerQueueBadge = findViewById(R.id.playerQueueBadge)
         songNumberInput = findViewById(R.id.songNumberInput)
         searchInput = findViewById(R.id.searchInput)
         allSongsFilter = findViewById(R.id.allSongsFilter)
@@ -237,8 +306,15 @@ class MainActivity : Activity() {
         recentFilter = findViewById(R.id.recentFilter)
         remoteSettingsButton = findViewById(R.id.remoteSettingsButton)
         playerSongTitle = findViewById(R.id.playerSongTitle)
+        playerSongTitleContainer = findViewById(R.id.playerSongTitleContainer)
+        playerHeaderControls = findViewById(R.id.playerHeaderControls)
         currentLyric = findViewById(R.id.currentLyric)
+        currentLyricOutline = findViewById(R.id.currentLyricOutline)
         nextLyric = findViewById(R.id.nextLyric)
+        nextLyricOutline = findViewById(R.id.nextLyricOutline)
+        mirrorLyricText(currentLyric, currentLyricOutline)
+        mirrorLyricText(nextLyric, nextLyricOutline)
+        playerProgressControls = findViewById(R.id.playerProgressControls)
         songProgress = findViewById(R.id.songProgress)
         elapsedTime = findViewById(R.id.elapsedTime)
         totalTime = findViewById(R.id.totalTime)
@@ -248,6 +324,8 @@ class MainActivity : Activity() {
         micVolumeValue = findViewById(R.id.micVolumeValue)
         backgroundVideoSurface = findViewById(R.id.backgroundVideoSurface)
         playerScreen = findViewById(R.id.playerScreen)
+        playerStage = findViewById(R.id.playerStage)
+        playerStage.post { updatePlayerSongTitleWidth(playerStage.width) }
         reservePanel = findViewById(R.id.reservePanel)
         reservePanelScrim = findViewById(R.id.reservePanelScrim)
         reserveNumberDisplay = findViewById(R.id.reserveNumberDisplay)
@@ -264,17 +342,33 @@ class MainActivity : Activity() {
         backgroundVideoButton = findViewById(R.id.backgroundVideoButton)
     }
 
+    private fun mirrorLyricText(source: TextView, outline: TextView) {
+        outline.text = source.text.toString()
+        source.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(text: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(text: CharSequence?, start: Int, before: Int, count: Int) {
+                outline.text = text?.toString().orEmpty()
+            }
+            override fun afterTextChanged(text: Editable?) = Unit
+        })
+    }
+
     private fun configureBackgroundVideo() {
         backgroundVideoAssets = assets.list("")
             .orEmpty()
             .filter { name -> VIDEO_EXTENSIONS.any { extension -> name.endsWith(extension, ignoreCase = true) } }
             .sorted()
-        val savedSelection = getSharedPreferences(LIBRARY_PREFERENCES, MODE_PRIVATE)
+        val preferences = getSharedPreferences(LIBRARY_PREFERENCES, MODE_PRIVATE)
+        customBackgroundVideoUri = preferences
+            .getString(CUSTOM_BACKGROUND_VIDEO_URI_KEY, null)
+            ?.let(Uri::parse)
+        val savedSelection = preferences
             .getString(BACKGROUND_VIDEO_KEY, VIDEO_SELECTION_AUTO)
             .orEmpty()
         backgroundVideoSelection = when {
             savedSelection == VIDEO_SELECTION_AUTO -> VIDEO_SELECTION_AUTO
             savedSelection == VIDEO_SELECTION_OFF -> VIDEO_SELECTION_OFF
+            savedSelection == VIDEO_SELECTION_CUSTOM && customBackgroundVideoUri != null -> VIDEO_SELECTION_CUSTOM
             savedSelection in backgroundVideoAssets -> savedSelection
             else -> VIDEO_SELECTION_AUTO
         }
@@ -299,21 +393,111 @@ class MainActivity : Activity() {
         val selections = buildList {
             add(VIDEO_SELECTION_AUTO)
             add(VIDEO_SELECTION_OFF)
+            if (customBackgroundVideoUri != null) add(VIDEO_SELECTION_CUSTOM)
+            add(VIDEO_SELECTION_CHOOSE_CUSTOM)
             addAll(backgroundVideoAssets)
         }
         val labels = buildList {
             add("Automatic — change with each song")
             add("Off — black background")
+            if (customBackgroundVideoUri != null) add(customBackgroundVideoLabel())
+            add("Choose custom video…")
             backgroundVideoAssets.forEach { assetName ->
                 add(backgroundVideoLabel(assetName))
             }
         }
-        AlertDialog.Builder(this)
-            .setTitle("Background video")
-            .setSingleChoiceItems(
-                labels.toTypedArray(),
-                selections.indexOf(backgroundVideoSelection).coerceAtLeast(0)
-            ) { dialog, which ->
+        val title = TextView(this).apply {
+            text = "VIDEO BACKGROUND"
+            setTextColor(color(R.color.white))
+            textSize = 15f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(18), dp(10), dp(12), dp(8))
+        }
+        val selectedPosition = selections.indexOf(backgroundVideoSelection).coerceAtLeast(0)
+        val adapter = object : BaseAdapter() {
+            override fun getCount(): Int = labels.size
+            override fun getItem(position: Int): String = labels[position]
+            override fun getItemId(position: Int): Long = position.toLong()
+
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val row = LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    layoutParams = AbsListView.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        dp(40)
+                    )
+                    setPadding(dp(12), dp(4), dp(6), dp(4))
+                    val selectable = android.util.TypedValue()
+                    theme.resolveAttribute(android.R.attr.selectableItemBackground, selectable, true)
+                    setBackgroundResource(selectable.resourceId)
+                }
+                val thumbnail = ImageView(this@MainActivity).apply {
+                    layoutParams = LinearLayout.LayoutParams(dp(56), dp(32))
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    setBackgroundColor(color(R.color.night))
+                }
+                val selection = selections[position]
+                val assetName = selection.takeIf { it in backgroundVideoAssets }
+                val customUri = customBackgroundVideoUri.takeIf { selection == VIDEO_SELECTION_CUSTOM }
+                val thumbnailKey = assetName ?: customUri?.toString()
+                when {
+                    thumbnailKey != null -> {
+                        val cached = synchronized(backgroundThumbnailLock) {
+                            backgroundThumbnailCache[thumbnailKey]
+                        }
+                        if (cached != null) {
+                            thumbnail.setImageBitmap(cached)
+                        } else {
+                            thumbnail.setImageResource(android.R.drawable.ic_media_play)
+                            thumbnail.setColorFilter(color(R.color.muted))
+                            loadBackgroundThumbnail(thumbnailKey, customUri) { notifyDataSetChanged() }
+                        }
+                    }
+                    selection == VIDEO_SELECTION_AUTO -> {
+                        thumbnail.setBackgroundColor(color(R.color.surface_high))
+                        thumbnail.setImageResource(android.R.drawable.ic_popup_sync)
+                        thumbnail.setColorFilter(color(R.color.cyan))
+                    }
+                    selection == VIDEO_SELECTION_OFF -> {
+                        thumbnail.setBackgroundColor(Color.BLACK)
+                        thumbnail.setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
+                        thumbnail.setColorFilter(color(R.color.muted))
+                    }
+                    else -> {
+                        thumbnail.setBackgroundColor(color(R.color.surface_high))
+                        thumbnail.setImageResource(android.R.drawable.ic_input_add)
+                        thumbnail.setColorFilter(color(R.color.cyan))
+                    }
+                }
+                row.addView(thumbnail)
+                row.addView(TextView(this@MainActivity).apply {
+                    text = labels[position]
+                    setTextColor(color(R.color.white))
+                    textSize = 12f
+                    maxLines = 1
+                    ellipsize = TextUtils.TruncateAt.END
+                    setPadding(dp(10), 0, dp(4), 0)
+                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
+                    gravity = Gravity.CENTER_VERTICAL
+                })
+                row.addView(RadioButton(this@MainActivity).apply {
+                    isChecked = position == selectedPosition
+                    isClickable = false
+                    isFocusable = false
+                    layoutParams = LinearLayout.LayoutParams(dp(30), ViewGroup.LayoutParams.MATCH_PARENT)
+                })
+                return row
+            }
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setCustomTitle(title)
+            .setAdapter(adapter) { dialog, which ->
+                if (selections[which] == VIDEO_SELECTION_CHOOSE_CUSTOM) {
+                    dialog.dismiss()
+                    openCustomBackgroundVideoPicker()
+                    return@setAdapter
+                }
                 backgroundVideoSelection = selections[which]
                 getSharedPreferences(LIBRARY_PREFERENCES, MODE_PRIVATE)
                     .edit()
@@ -322,8 +506,97 @@ class MainActivity : Activity() {
                 applyBackgroundVideoSelection()
                 dialog.dismiss()
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+            .setNegativeButton("Close", null)
+            .create()
+        dialog.setOnShowListener {
+            val compactWidth = (resources.displayMetrics.widthPixels * 0.42f)
+                .toInt()
+                .coerceIn(dp(300), dp(380))
+            dialog.window?.setLayout(compactWidth, ViewGroup.LayoutParams.WRAP_CONTENT)
+            dialog.listView.apply {
+                dividerHeight = 0
+                setPadding(0, dp(2), 0, dp(2))
+            }
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).apply {
+                minWidth = 0
+                minHeight = 0
+                textSize = 12f
+                setPadding(dp(12), 0, dp(12), 0)
+                layoutParams = layoutParams.apply { height = dp(34) }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun openCustomBackgroundVideoPicker() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "video/*"
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+        }
+        startActivityForResult(intent, REQUEST_CUSTOM_BACKGROUND_VIDEO)
+    }
+
+    private fun customBackgroundVideoLabel(): String {
+        val uri = customBackgroundVideoUri ?: return "Add custom video…"
+        val displayName = runCatching {
+            contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+        }.getOrNull()
+        val name = displayName ?: uri.lastPathSegment ?: "Selected video"
+        return "Custom - ${name.take(MAX_BACKGROUND_LABEL_LENGTH)}"
+    }
+
+    private fun loadBackgroundThumbnail(
+        sourceKey: String,
+        customUri: Uri? = null,
+        onLoaded: () -> Unit
+    ) {
+        synchronized(backgroundThumbnailLock) {
+            if (
+                sourceKey in backgroundThumbnailCache ||
+                sourceKey in backgroundThumbnailUnavailable ||
+                !backgroundThumbnailLoads.add(sourceKey)
+            ) return
+        }
+        backgroundThumbnailExecutor.execute {
+            val retriever = MediaMetadataRetriever()
+            val thumbnail = try {
+                if (customUri != null) {
+                    retriever.setDataSource(this, customUri)
+                } else {
+                    assets.openFd(sourceKey).use { descriptor ->
+                        retriever.setDataSource(
+                            descriptor.fileDescriptor,
+                            descriptor.startOffset,
+                            descriptor.length
+                        )
+                    }
+                }
+                retriever.getFrameAtTime(1_000_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                    ?.let { frame ->
+                        Bitmap.createScaledBitmap(frame, dp(112), dp(64), true).also { scaled ->
+                            if (scaled !== frame) frame.recycle()
+                        }
+                    }
+            } catch (_: Exception) {
+                null
+            } finally {
+                retriever.release()
+            }
+            synchronized(backgroundThumbnailLock) {
+                backgroundThumbnailLoads.remove(sourceKey)
+                if (thumbnail == null) {
+                    backgroundThumbnailUnavailable.add(sourceKey)
+                } else {
+                    backgroundThumbnailCache[sourceKey] = thumbnail
+                }
+            }
+            runOnUiThread {
+                if (!isFinishing && !isDestroyed) onLoaded()
+            }
+        }
     }
 
     private fun applyBackgroundVideoSelection() {
@@ -334,6 +607,7 @@ class MainActivity : Activity() {
         val message = when (backgroundVideoSelection) {
             VIDEO_SELECTION_AUTO -> "Background video set to Automatic"
             VIDEO_SELECTION_OFF -> "Background video turned off"
+            VIDEO_SELECTION_CUSTOM -> "Custom background video selected"
             else -> "Background changed to ${backgroundVideoLabel(backgroundVideoSelection)}"
         }
         showMessage(message)
@@ -341,6 +615,7 @@ class MainActivity : Activity() {
 
     private fun resolveBackgroundVideo(song: Song): String? = when (backgroundVideoSelection) {
         VIDEO_SELECTION_OFF -> null
+        VIDEO_SELECTION_CUSTOM -> CUSTOM_VIDEO_SOURCE.takeIf { customBackgroundVideoUri != null }
         VIDEO_SELECTION_AUTO -> if (backgroundVideoAssets.isEmpty()) {
             null
         } else {
@@ -355,12 +630,14 @@ class MainActivity : Activity() {
         val buttonText = when {
             backgroundVideoSelection == VIDEO_SELECTION_AUTO -> "BG Auto"
             backgroundVideoSelection == VIDEO_SELECTION_OFF -> "BG Off"
+            backgroundVideoSelection == VIDEO_SELECTION_CUSTOM -> "BG Custom"
             selectedIndex >= 0 -> "BG ${selectedIndex + 1}"
             else -> "BG Auto"
         }
         val description = when {
             backgroundVideoSelection == VIDEO_SELECTION_AUTO -> "Automatic background video"
             backgroundVideoSelection == VIDEO_SELECTION_OFF -> "Background video off"
+            backgroundVideoSelection == VIDEO_SELECTION_CUSTOM -> customBackgroundVideoLabel()
             selectedIndex >= 0 -> "Background video ${selectedIndex + 1}: ${backgroundVideoLabel(backgroundVideoSelection)}"
             else -> "Automatic background video"
         }
@@ -390,9 +667,21 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.startQueueButton).setOnClickListener { startNextQueuedSong() }
         songNumberInput.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_GO) {
+                dismissKeyboard(songNumberInput)
+                songNumberInput.clearFocus()
                 playEnteredNumber()
                 true
             } else false
+        }
+        searchInput.setOnEditorActionListener { _, actionId, event ->
+            val submitted = actionId == EditorInfo.IME_ACTION_SEARCH ||
+                actionId == EditorInfo.IME_ACTION_DONE ||
+                (event?.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_DOWN)
+            if (submitted) {
+                dismissKeyboard(searchInput)
+                searchInput.clearFocus()
+            }
+            submitted
         }
         searchInput.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(text: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -447,26 +736,48 @@ class MainActivity : Activity() {
     private fun showBrowserRemoteDialog() {
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(22), dp(4), dp(22), dp(2))
+            setPadding(dp(18), dp(2), dp(18), dp(2))
         }
         val statusText = simpleText("", color(R.color.cyan), 14f).apply {
             setTypeface(typeface, Typeface.BOLD)
         }
-        val addressText = simpleText("", Color.WHITE, 16f).apply {
-            setPadding(0, dp(9), 0, dp(8))
+        val addressText = simpleText("", Color.WHITE, 14f).apply {
+            setPadding(0, dp(5), 0, dp(5))
             setTextIsSelectable(true)
         }
         val helpText = simpleText(
-            "Connect the other device to the same Wi-Fi or hotspot, then open this address in its browser.",
+            "Connect the remote device to the same Wi-Fi or hotspot, then scan the QR code.",
             color(R.color.muted),
-            13f
-        ).apply { setPadding(0, 0, 0, dp(14)) }
+            12f
+        ).apply { setPadding(0, 0, 0, dp(8)) }
+        val qrImage = ImageView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(158), dp(158))
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            setBackgroundColor(Color.WHITE)
+            setPadding(dp(5), dp(5), dp(5), dp(5))
+            contentDescription = "QR code for the browser remote"
+        }
+        val qrColumn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(0, 0, dp(16), 0)
+            addView(simpleText("SCAN TO CONNECT", color(R.color.cyan), 10f).apply {
+                setTypeface(typeface, Typeface.BOLD)
+                gravity = Gravity.CENTER
+                setPadding(0, 0, 0, dp(5))
+            })
+            addView(qrImage)
+        }
+        val settingsColumn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(dp(270), ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
         val enableRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(4), 0, dp(10))
+            setPadding(0, 0, 0, dp(5))
         }
-        enableRow.addView(simpleText("Allow browser reservations", Color.WHITE, 15f).apply {
+        enableRow.addView(simpleText("Enable browser remote", Color.WHITE, 14f).apply {
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             setTypeface(typeface, Typeface.BOLD)
         })
@@ -480,27 +791,41 @@ class MainActivity : Activity() {
             progress = remoteQueueLimit - MIN_REMOTE_QUEUE_LIMIT
         }
         val limitHelp = simpleText(
-            "Browser requests stop when the main queue reaches this limit. Songs can still be added on this device.",
+            "Limits browser song requests. Playback controls remain available while the remote is enabled.",
             color(R.color.muted),
-            12f
+            11f
         )
+        settingsColumn.addView(enableRow)
+        settingsColumn.addView(limitLabel)
+        settingsColumn.addView(limitBar)
+        settingsColumn.addView(limitHelp)
+        val detailsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.TOP
+            addView(qrColumn)
+            addView(settingsColumn)
+        }
         content.addView(statusText)
         content.addView(addressText)
         content.addView(helpText)
-        content.addView(enableRow)
-        content.addView(limitLabel)
-        content.addView(limitBar)
-        content.addView(limitHelp)
+        content.addView(detailsRow)
 
         fun refresh() {
             enabledSwitch.isChecked = remoteEnabled
             statusText.text = if (remoteEnabled) "●  REMOTE IS ON" else "○  REMOTE IS OFF"
             statusText.setTextColor(if (remoteEnabled) color(R.color.cyan) else color(R.color.muted))
             val addresses = browserRemoteServer?.browserAddresses().orEmpty()
+            val address = addresses.firstOrNull()
             addressText.text = when {
                 !remoteEnabled -> "Turn on to create the browser address"
                 addresses.isEmpty() -> "Waiting for a Wi-Fi or hotspot connection"
                 else -> addresses.joinToString("\n")
+            }
+            qrColumn.visibility = if (remoteEnabled && address != null) View.VISIBLE else View.GONE
+            if (remoteEnabled && address != null) {
+                qrImage.setImageBitmap(createRemoteQrCode(address, dp(148)))
+            } else {
+                qrImage.setImageDrawable(null)
             }
             limitLabel.text = "Remote queue limit: $remoteQueueLimit songs"
         }
@@ -540,6 +865,29 @@ class MainActivity : Activity() {
         dialog.show()
     }
 
+    private fun createRemoteQrCode(value: String, size: Int): Bitmap {
+        val matrix = QRCodeWriter().encode(
+            value,
+            BarcodeFormat.QR_CODE,
+            size,
+            size,
+            mapOf(
+                EncodeHintType.MARGIN to 1,
+                EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M
+            )
+        )
+        val pixels = IntArray(size * size)
+        for (y in 0 until size) {
+            val rowOffset = y * size
+            for (x in 0 until size) {
+                pixels[rowOffset + x] = if (matrix[x, y]) Color.BLACK else Color.WHITE
+            }
+        }
+        return Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888).apply {
+            setPixels(pixels, 0, size, 0, 0, size, size)
+        }
+    }
+
     private fun startBrowserRemote(showFailureMessage: Boolean): Boolean {
         if (browserRemoteServer != null) {
             remoteEnabled = true
@@ -551,7 +899,8 @@ class MainActivity : Activity() {
             catalog = catalog.map { RemoteCatalogSong(it.number, it.title, it.artist) },
             port = REMOTE_PORT,
             statusProvider = { RemoteQueueStatus(publishedQueueSize, remoteQueueLimit) },
-            reservationHandler = ::reserveSongFromBrowser
+            reservationHandler = ::reserveSongFromBrowser,
+            controlHandler = ::controlPlaybackFromBrowser
         )
         val failure = AtomicReference<Throwable?>(null)
         val ready = CountDownLatch(1)
@@ -627,33 +976,55 @@ class MainActivity : Activity() {
         return result.get()
     }
 
+    private fun controlPlaybackFromBrowser(rawAction: String): RemoteControlResult {
+        val result = AtomicReference(RemoteControlResult(false, "The main device did not respond."))
+        val completed = CountDownLatch(1)
+        runOnUiThread {
+            try {
+                result.set(
+                    if (!remoteEnabled) {
+                        RemoteControlResult(false, "The browser remote is turned off.")
+                    } else {
+                        when (rawAction) {
+                            "restart" -> if (restartCurrentPlayback()) {
+                                RemoteControlResult(true, "Song restarted.")
+                            } else {
+                                RemoteControlResult(false, "No song is playing.")
+                            }
+                            "pause" -> if (toggleCurrentPlayback()) {
+                                RemoteControlResult(true, if (isPlaying) "Playback resumed." else "Playback paused.")
+                            } else {
+                                RemoteControlResult(false, "No song is ready to pause.")
+                            }
+                            "finish" -> if (finishCurrentPlayback()) {
+                                RemoteControlResult(true, "Song finished.")
+                            } else {
+                                RemoteControlResult(false, "No song is playing.")
+                            }
+                            "next" -> if (queue.isNotEmpty()) {
+                                startNextQueuedSong()
+                                RemoteControlResult(true, "Playing the next queued song.")
+                            } else {
+                                RemoteControlResult(false, "There is no next song in the queue.")
+                            }
+                            else -> RemoteControlResult(false, "Unknown playback control.")
+                        }
+                    }
+                )
+            } finally {
+                completed.countDown()
+            }
+        }
+        completed.await(REMOTE_RESERVATION_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        return result.get()
+    }
+
     private fun wirePlayerScreen() {
         wireReservationPanel()
         findViewById<Button>(R.id.playerHomeButton).setOnClickListener { showHome() }
-        findViewById<Button>(R.id.restartButton).setOnClickListener {
-            elapsedSeconds = 0
-            playbackPositionMs = 0L
-            mediaPlayer?.let { runCatching { it.seekTo(0); it.start() } }
-            backgroundVideoPlayer?.let { runCatching { it.seekTo(0); it.start() } }
-            isPlaying = true
-            pauseButton.text = "Pause"
-            updatePlaybackUi()
-            updateLyrics(0L)
-        }
-        pauseButton.setOnClickListener {
-            if (isPlaying) {
-                mediaPlayer?.let { runCatching { it.pause() } }
-                backgroundVideoPlayer?.let { runCatching { it.pause() } }
-                isPlaying = false
-                pauseButton.text = "Resume"
-            } else {
-                mediaPlayer?.let { runCatching { it.start() } }
-                backgroundVideoPlayer?.let { runCatching { it.start() } }
-                isPlaying = true
-                pauseButton.text = "Pause"
-            }
-        }
-        findViewById<Button>(R.id.finishButton).setOnClickListener { showScore() }
+        findViewById<Button>(R.id.restartButton).setOnClickListener { restartCurrentPlayback() }
+        pauseButton.setOnClickListener { toggleCurrentPlayback() }
+        findViewById<Button>(R.id.finishButton).setOnClickListener { finishCurrentPlayback() }
         findViewById<Button>(R.id.keyDownButton).setOnClickListener {
             keyShift = (keyShift - 1).coerceAtLeast(-12)
             updateMusicControls()
@@ -689,15 +1060,78 @@ class MainActivity : Activity() {
                 updatePlaybackUi()
                 updateLyrics(playbackPositionMs)
             }
-            override fun onStartTrackingTouch(bar: SeekBar?) = Unit
-            override fun onStopTrackingTouch(bar: SeekBar?) = Unit
+            override fun onStartTrackingTouch(bar: SeekBar?) {
+                showPlayerProgressControls(autoHide = false)
+            }
+
+            override fun onStopTrackingTouch(bar: SeekBar?) {
+                showPlayerProgressControls(autoHide = true)
+            }
         })
+    }
+
+    private fun restartCurrentPlayback(): Boolean {
+        if (screens.displayedChild != SCREEN_PLAYER || currentSong == null) return false
+        elapsedSeconds = 0
+        playbackPositionMs = 0L
+        mediaPlayer?.let { runCatching { it.seekTo(0); it.start() } }
+        backgroundVideoPlayer?.let { runCatching { it.seekTo(0); it.start() } }
+        isPlaying = true
+        pauseButton.text = "Pause"
+        startPlayerTitleAnimation()
+        updatePlaybackUi()
+        updateLyrics(0L)
+        return true
+    }
+
+    private fun toggleCurrentPlayback(): Boolean {
+        if (screens.displayedChild != SCREEN_PLAYER || currentSong == null || pauseButton.text == "Loading…") {
+            return false
+        }
+        if (isPlaying) {
+            mediaPlayer?.let { runCatching { it.pause() } }
+            backgroundVideoPlayer?.let { runCatching { it.pause() } }
+            isPlaying = false
+            pauseButton.text = "Resume"
+            stopPlayerTitleAnimation()
+        } else {
+            mediaPlayer?.let { runCatching { it.start() } }
+            backgroundVideoPlayer?.let { runCatching { it.start() } }
+            isPlaying = true
+            pauseButton.text = "Pause"
+            startPlayerTitleAnimation()
+        }
+        return true
+    }
+
+    private fun finishCurrentPlayback(): Boolean {
+        if (screens.displayedChild != SCREEN_PLAYER || currentSong == null) return false
+        showScore()
+        return true
+    }
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (::screens.isInitialized &&
+            ::playerProgressControls.isInitialized &&
+            screens.displayedChild == SCREEN_PLAYER
+        ) {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> showPlayerProgressControls(autoHide = false)
+                MotionEvent.ACTION_UP,
+                MotionEvent.ACTION_CANCEL -> showPlayerProgressControls(autoHide = true)
+            }
+        }
+        return super.dispatchTouchEvent(event)
     }
 
     @Suppress("ClickableViewAccessibility")
     private fun wireReservationPanel() {
+        val screenWidth = resources.displayMetrics.widthPixels
+        val minimumPanelWidth = minOf(dp(280), (screenWidth * 0.62f).toInt())
         reservePanel.layoutParams = reservePanel.layoutParams.apply {
-            width = (resources.displayMetrics.widthPixels * 0.28f).toInt().coerceIn(dp(260), dp(360))
+            width = (screenWidth * 0.42f).toInt()
+                .coerceAtLeast(minimumPanelWidth)
+                .coerceAtMost((screenWidth * 0.62f).toInt())
         }
         reserveSearchAdapter = ReserveSearchAdapter()
         reserveTitleResults.adapter = reserveSearchAdapter
@@ -711,6 +1145,16 @@ class MainActivity : Activity() {
             }
             override fun afterTextChanged(text: Editable?) = Unit
         })
+        reserveTitleSearch.setOnEditorActionListener { _, actionId, event ->
+            val submitted = actionId == EditorInfo.IME_ACTION_SEARCH ||
+                actionId == EditorInfo.IME_ACTION_DONE ||
+                (event?.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_DOWN)
+            if (submitted) {
+                dismissKeyboard(reserveTitleSearch)
+                reserveTitleSearch.clearFocus()
+            }
+            submitted
+        }
         reserveNumberModeButton.setOnClickListener { setReservationMode(titleMode = false) }
         reserveTitleModeButton.setOnClickListener { setReservationMode(titleMode = true) }
         backgroundVideoButton.setOnClickListener { showBackgroundVideoDialog() }
@@ -774,6 +1218,7 @@ class MainActivity : Activity() {
 
     private fun showReservationPanel() {
         if (reservePanel.visibility == View.VISIBLE) return
+        resizePlayerStageForPanel(panelVisible = true, animate = true)
         reservePanelScrim.animate().cancel()
         reservePanelScrim.visibility = View.VISIBLE
         reservePanelScrim.alpha = 0f
@@ -795,6 +1240,7 @@ class MainActivity : Activity() {
     private fun hideReservationPanel(animate: Boolean = true) {
         if (reservePanel.visibility != View.VISIBLE) return
         hideReservationKeyboard()
+        resizePlayerStageForPanel(panelVisible = false, animate = animate)
         if (!animate) {
             reservePanel.animate().cancel()
             reservePanelScrim.animate().cancel()
@@ -822,6 +1268,35 @@ class MainActivity : Activity() {
                 reservePanel.translationX = 0f
             }
             .start()
+    }
+
+    private fun resizePlayerStageForPanel(panelVisible: Boolean, animate: Boolean) {
+        val fullWidth = playerScreen.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
+        val panelWidth = reservePanel.width.takeIf { it > 0 } ?: reservePanel.layoutParams.width
+        val targetWidth = if (panelVisible) (fullWidth - panelWidth).coerceAtLeast(dp(240)) else fullWidth
+        val currentWidth = playerStage.width.takeIf { it > 0 } ?: fullWidth
+        playerStageResizeAnimator?.cancel()
+
+        fun applyWidth(width: Int) {
+            playerStage.layoutParams = playerStage.layoutParams.apply { this.width = width }
+            updatePlayerSongTitleWidth(if (width > 0) width else fullWidth)
+        }
+
+        if (!animate || currentWidth == targetWidth) {
+            applyWidth(if (panelVisible) targetWidth else ViewGroup.LayoutParams.MATCH_PARENT)
+            return
+        }
+        playerStageResizeAnimator = ValueAnimator.ofInt(currentWidth, targetWidth).apply {
+            duration = 220L
+            addUpdateListener { animator -> applyWidth(animator.animatedValue as Int) }
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: android.animation.Animator) {
+                    if (!panelVisible) applyWidth(ViewGroup.LayoutParams.MATCH_PARENT)
+                    playerStageResizeAnimator = null
+                }
+            })
+            start()
+        }
     }
 
     private fun updateReservationEntry() {
@@ -859,6 +1334,7 @@ class MainActivity : Activity() {
         reservationTitleMode = titleMode
         val numberVisibility = if (titleMode) View.GONE else View.VISIBLE
         val titleVisibility = if (titleMode) View.VISIBLE else View.GONE
+        findViewById<View>(R.id.reservationPerformanceControls).visibility = numberVisibility
         reserveNumberDisplay.visibility = numberVisibility
         reserveSongPreview.visibility = numberVisibility
         reserveKeypad.visibility = numberVisibility
@@ -907,9 +1383,13 @@ class MainActivity : Activity() {
     }
 
     private fun hideReservationKeyboard() {
-        (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager)
-            .hideSoftInputFromWindow(reserveTitleSearch.windowToken, 0)
+        dismissKeyboard(reserveTitleSearch)
         reserveTitleSearch.clearFocus()
+    }
+
+    private fun dismissKeyboard(view: View) {
+        (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager)
+            .hideSoftInputFromWindow(view.windowToken, 0)
     }
 
     private fun wireScoreScreen() {
@@ -1104,7 +1584,6 @@ class MainActivity : Activity() {
         publishedQueueSize = queue.size
         queueList.removeAllViews()
         queueBadge.text = "Queue  ${queue.size}"
-        playerQueueBadge.text = "Queue ${queue.size}"
         val nextSong = queue.firstOrNull()
         playerReserveCount.text = queue.size.toString()
         playerReserveBadge.isSelected = false
@@ -1158,6 +1637,8 @@ class MainActivity : Activity() {
     }
 
     private fun playEnteredNumber() {
+        dismissKeyboard(songNumberInput)
+        songNumberInput.clearFocus()
         val entered = songNumberInput.text.toString().trim()
         if (entered.isEmpty()) {
             showMessage("Enter a song number.")
@@ -1185,6 +1666,8 @@ class MainActivity : Activity() {
 
     private fun startSong(song: Song) {
         hideReservationPanel(animate = false)
+        stopPlayerTitleAnimation()
+        releaseScoreSound()
         releasePlayer()
         releaseBackgroundVideo()
         currentSong = song
@@ -1209,6 +1692,7 @@ class MainActivity : Activity() {
         updateMusicControls()
         updatePlaybackUi()
         screens.displayedChild = SCREEN_PLAYER
+        showPlayerProgressControls(autoHide = true)
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
             startMicrophoneMonitor()
         }
@@ -1217,7 +1701,7 @@ class MainActivity : Activity() {
     }
 
     private fun prepareBackgroundVideo() {
-        val assetName = selectedBackgroundAsset ?: run {
+        val videoSource = selectedBackgroundAsset ?: run {
             backgroundVideoSurface.visibility = View.INVISIBLE
             return
         }
@@ -1225,11 +1709,19 @@ class MainActivity : Activity() {
         if (!videoSurfaceReady || backgroundVideoPlayer != null || screens.displayedChild != SCREEN_PLAYER) return
 
         try {
-            val descriptor = assets.openFd(assetName)
             val player = MediaPlayer()
             backgroundVideoPlayer = player
-            player.setDataSource(descriptor.fileDescriptor, descriptor.startOffset, descriptor.length)
-            descriptor.close()
+            if (videoSource == CUSTOM_VIDEO_SOURCE) {
+                player.setDataSource(this, customBackgroundVideoUri ?: error("Custom video is unavailable"))
+            } else {
+                assets.openFd(videoSource).use { descriptor ->
+                    player.setDataSource(
+                        descriptor.fileDescriptor,
+                        descriptor.startOffset,
+                        descriptor.length
+                    )
+                }
+            }
             player.setDisplay(backgroundVideoSurface.holder)
             player.setVolume(0f, 0f)
             player.isLooping = true
@@ -1281,6 +1773,7 @@ class MainActivity : Activity() {
                 isPlaying = true
                 playbackPositionMs = 0L
                 prepared.start()
+                startPlayerTitleAnimation()
                 updatePlaybackUi()
                 updateLyrics(0L)
             }
@@ -1304,6 +1797,7 @@ class MainActivity : Activity() {
         nextLyric.text = "Playback unavailable • interface preview continues"
         pauseButton.text = "Pause"
         isPlaying = true
+        startPlayerTitleAnimation()
         showMessage(message)
     }
 
@@ -1312,6 +1806,64 @@ class MainActivity : Activity() {
         val safeElapsed = (safePositionMs / 1000L).toInt()
         songProgress.progress = ((safePositionMs / (currentDurationSeconds * 1000f)) * 1000).toInt()
         elapsedTime.text = formatTime(safeElapsed)
+    }
+
+    private fun startPlayerTitleAnimation() {
+        playerTitleAnimator?.cancel()
+        playerSongTitleContainer.post {
+            if (!isPlaying || screens.displayedChild != SCREEN_PLAYER) return@post
+            playerTitleAnimator?.cancel()
+            playerSongTitle.ellipsize = null
+            playerSongTitle.setHorizontallyScrolling(true)
+            val fullTitleWidth = kotlin.math.ceil(
+                playerSongTitle.paint.measureText(playerSongTitle.text.toString()).toDouble()
+            ).toInt() + playerSongTitle.compoundPaddingLeft + playerSongTitle.compoundPaddingRight
+            playerSongTitle.layoutParams = playerSongTitle.layoutParams.apply {
+                width = fullTitleWidth.coerceAtLeast(1)
+            }
+            playerSongTitle.requestLayout()
+            val travel = (playerSongTitleContainer.width + fullTitleWidth) / 2f
+            val distance = travel * 2f
+            val durationMs = (distance / dp(48) * 1_000f).toLong().coerceAtLeast(4_000L)
+            playerTitleAnimator = ObjectAnimator.ofFloat(
+                playerSongTitle,
+                View.TRANSLATION_X,
+                travel,
+                -travel
+            ).apply {
+                duration = durationMs
+                repeatCount = ValueAnimator.INFINITE
+                repeatMode = ValueAnimator.RESTART
+                interpolator = LinearInterpolator()
+                start()
+            }
+        }
+    }
+
+    private fun updatePlayerSongTitleWidth(stageWidth: Int) {
+        if (!::playerSongTitle.isInitialized || !::playerHeaderControls.isInitialized || stageWidth <= 0) return
+        val controlWidth = playerHeaderControls.width.takeIf { it > 0 } ?: dp(315)
+        val safeWidth = (stageWidth - (controlWidth + dp(36)) * 2).coerceAtLeast(dp(110))
+        playerSongTitleContainer.layoutParams = playerSongTitleContainer.layoutParams.apply { width = safeWidth }
+    }
+
+    private fun stopPlayerTitleAnimation() {
+        playerTitleAnimator?.cancel()
+        playerTitleAnimator = null
+        if (::playerSongTitle.isInitialized) {
+            playerSongTitle.alpha = 1f
+            playerSongTitle.translationX = 0f
+        }
+    }
+
+    private fun showPlayerProgressControls(autoHide: Boolean) {
+        handler.removeCallbacks(hidePlayerProgressControls)
+        playerProgressControls.animate().cancel()
+        playerProgressControls.visibility = View.VISIBLE
+        playerProgressControls.alpha = 1f
+        if (autoHide) {
+            handler.postDelayed(hidePlayerProgressControls, PLAYER_PROGRESS_HIDE_DELAY_MS)
+        }
     }
 
     private fun updateLyrics(positionMs: Long) {
@@ -1462,7 +2014,7 @@ class MainActivity : Activity() {
         )
         if (highlightEnd > 0) {
             styledLine.setSpan(
-                ForegroundColorSpan(color(R.color.blue)),
+                ForegroundColorSpan(color(R.color.lyric_highlight)),
                 0,
                 highlightEnd.coerceAtMost(styledLine.length),
                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
@@ -1612,15 +2164,17 @@ class MainActivity : Activity() {
 
     private fun showScore() {
         val song = currentSong ?: return
+        stopPlayerTitleAnimation()
+        handler.removeCallbacks(hidePlayerProgressControls)
         hideReservationPanel(animate = false)
         stopMicrophoneMonitor()
         isPlaying = false
         releasePlayer()
         releaseBackgroundVideo()
         val seed = song.number.toIntOrNull() ?: 1
-        val pitch = 82 + (seed % 12)
-        val rhythm = 80 + ((seed / 3) % 14)
-        val stability = 81 + ((seed / 7) % 13)
+        val pitch = 82 + (seed % 19)
+        val rhythm = 80 + ((seed / 3) % 21)
+        val stability = 81 + ((seed / 7) % 20)
         val total = (pitch + rhythm + stability) / 3
         findViewById<TextView>(R.id.totalScore).text = total.toString()
         findViewById<TextView>(R.id.pitchScore).text = pitch.toString()
@@ -1629,6 +2183,7 @@ class MainActivity : Activity() {
         findViewById<TextView>(R.id.scoredSongTitle).text = "♪  ${song.title} — ${song.artist}  ♪"
         findViewById<Button>(R.id.nextSongButton).text = if (queue.isEmpty()) "Back Home" else "Next Song  ▶"
         screens.displayedChild = SCREEN_SCORE
+        playScoreSound(total)
         findViewById<View>(R.id.scoreMedallion).apply {
             animate().cancel()
             alpha = 0f
@@ -1644,7 +2199,10 @@ class MainActivity : Activity() {
     }
 
     private fun showHome() {
+        stopPlayerTitleAnimation()
+        handler.removeCallbacks(hidePlayerProgressControls)
         hideReservationPanel(animate = false)
+        releaseScoreSound()
         stopMicrophoneMonitor()
         isPlaying = false
         releasePlayer()
@@ -1669,6 +2227,52 @@ class MainActivity : Activity() {
             player.release()
         }
         backgroundVideoPlayer = null
+    }
+
+    private fun playScoreSound(score: Int) {
+        releaseScoreSound()
+        val assetName = if (score == PERFECT_SCORE) PERFECT_SCORE_SOUND_ASSET else SCORE_SOUND_ASSET
+        val player = MediaPlayer()
+        try {
+            player.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build()
+            )
+            assets.openFd(assetName).use { descriptor ->
+                player.setDataSource(
+                    descriptor.fileDescriptor,
+                    descriptor.startOffset,
+                    descriptor.length
+                )
+            }
+            player.setOnPreparedListener { prepared ->
+                if (scoreSoundPlayer === prepared) prepared.start()
+            }
+            player.setOnCompletionListener { completed ->
+                if (scoreSoundPlayer === completed) scoreSoundPlayer = null
+                completed.release()
+            }
+            player.setOnErrorListener { failed, _, _ ->
+                if (scoreSoundPlayer === failed) scoreSoundPlayer = null
+                failed.release()
+                true
+            }
+            scoreSoundPlayer = player
+            player.prepareAsync()
+        } catch (_: Exception) {
+            if (scoreSoundPlayer === player) scoreSoundPlayer = null
+            player.release()
+        }
+    }
+
+    private fun releaseScoreSound() {
+        scoreSoundPlayer?.let { player ->
+            runCatching { player.stop() }
+            player.release()
+        }
+        scoreSoundPlayer = null
     }
 
     private class LimitedInputStream(
@@ -1702,8 +2306,13 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         handler.removeCallbacks(progressTick)
+        handler.removeCallbacks(hidePlayerProgressControls)
+        stopPlayerTitleAnimation()
+        playerStageResizeAnimator?.cancel()
+        backgroundThumbnailExecutor.shutdownNow()
         browserRemoteServer?.stop()
         browserRemoteServer = null
+        releaseScoreSound()
         stopMicrophoneMonitor()
         releasePlayer()
         releaseBackgroundVideo()
@@ -1730,7 +2339,7 @@ class MainActivity : Activity() {
                 ellipsize = TextUtils.TruncateAt.END
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(dp(8), dp(4), dp(6), dp(4))
-                layoutParams = AbsListView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52))
+                layoutParams = AbsListView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48))
             }
             val song = getItem(position)
             row.text = "${song.number}  ${song.title}\n${song.artist}"
@@ -1760,7 +2369,7 @@ class MainActivity : Activity() {
                     gravity = Gravity.CENTER_VERTICAL
                     setPadding(dp(12), 0, dp(8), 0)
                     setBackgroundResource(R.drawable.bg_home_row)
-                    layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56))
+                    layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50))
                 }
                 val number = simpleText("", color(R.color.cyan), 15f).apply {
                     gravity = Gravity.CENTER
@@ -1816,7 +2425,11 @@ class MainActivity : Activity() {
             }
             holder.favorite.setOnClickListener { toggleFavorite(song) }
             holder.add.contentDescription = "Add ${song.title} to queue"
-            holder.add.setOnClickListener { addToQueue(song) }
+            holder.add.setOnClickListener {
+                dismissKeyboard(searchInput)
+                searchInput.clearFocus()
+                addToQueue(song)
+            }
             return row
         }
     }
@@ -1844,7 +2457,10 @@ class MainActivity : Activity() {
         private const val SCREEN_SCORE = 2
         private const val DEFAULT_DURATION_SECONDS = 240
         private const val PROGRESS_TICK_MS = 200L
+        private const val PLAYER_PROGRESS_HIDE_DELAY_MS = 3_000L
+        private const val PLAYER_PROGRESS_FADE_MS = 220L
         private const val REQUEST_RECORD_AUDIO = 2001
+        private const val REQUEST_CUSTOM_BACKGROUND_VIDEO = 2002
         private const val NO_LYRICS_INDEX = -2
         private const val LYRIC_MODE_UNSET = -1
         private const val LYRIC_MODE_ACTIVE = 0
@@ -1865,14 +2481,21 @@ class MainActivity : Activity() {
         private const val DEFAULT_REMOTE_QUEUE_LIMIT = 15
         private const val REMOTE_START_TIMEOUT_MS = 2_000L
         private const val REMOTE_RESERVATION_TIMEOUT_MS = 3_000L
+        private const val PERFECT_SCORE = 100
+        private const val PERFECT_SCORE_SOUND_ASSET = "100.mp3"
+        private const val SCORE_SOUND_ASSET = "Score.mp3"
         private const val LIBRARY_PREFERENCES = "karaoke_library"
         private const val FAVORITES_KEY = "favorite_song_numbers"
         private const val RECENTS_KEY = "recent_song_numbers"
         private const val BACKGROUND_VIDEO_KEY = "background_video"
+        private const val CUSTOM_BACKGROUND_VIDEO_URI_KEY = "custom_background_video_uri"
         private const val REMOTE_ENABLED_KEY = "browser_remote_enabled"
         private const val REMOTE_QUEUE_LIMIT_KEY = "browser_remote_queue_limit"
         private const val VIDEO_SELECTION_AUTO = "__auto__"
         private const val VIDEO_SELECTION_OFF = "__off__"
+        private const val VIDEO_SELECTION_CUSTOM = "__custom__"
+        private const val VIDEO_SELECTION_CHOOSE_CUSTOM = "__choose_custom__"
+        private const val CUSTOM_VIDEO_SOURCE = "__custom_video_source__"
         private const val CATALOG_ASSET = "song_catalog.tsv"
         private const val PACK_ASSET = "songs.kpack"
         private val LYRIC_WHITESPACE_REGEX = Regex("\\s+")

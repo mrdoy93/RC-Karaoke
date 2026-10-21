@@ -8,6 +8,7 @@
     <color name="muted">#AAB6D0</color>
     <color name="violet">#9A3CFF</color>
     <color name="blue">#2F8CFF</color>
+    <color name="lyric_highlight">#FF3030</color>
     <color name="dark_blue">#00008B</color>
     <color name="cyan">#4FE4FF</color>
     <color name="pink">#FF4EB8</color>

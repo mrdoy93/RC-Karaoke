@@ -11,8 +11,8 @@ android {
         applicationId = "com.example.offlinekaraoke"
         minSdk = 26
         targetSdk = 35
-        versionCode = 13
-        versionName = "0.9.1"
+        versionCode = 15
+        versionName = "0.9.3"
     }
 
     buildTypes {
@@ -44,10 +44,12 @@ android {
         getByName("main") {
             // Package reusable video backgrounds directly from the workspace folder.
             assets.srcDir(rootProject.file("Background"))
+            // Package the perfect-score and regular-score celebration sounds.
+            assets.srcDir(rootProject.file("Score Sound"))
         }
     }
 }
 
 dependencies {
-    // Intentionally empty: this prototype uses only Android framework APIs.
+    implementation("com.google.zxing:core:3.5.3")
 }
