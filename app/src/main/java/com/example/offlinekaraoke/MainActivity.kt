@@ -46,10 +46,10 @@ import android.widget.AbsListView
 import android.widget.BaseAdapter
 import android.widget.Button
 import android.widget.EditText
+import android.widget.GridView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ListView
-import android.widget.RadioButton
 import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
@@ -136,10 +136,15 @@ class MainActivity : Activity() {
     private lateinit var keyValue: TextView
     private lateinit var tempoValue: TextView
     private lateinit var micVolumeValue: TextView
+    private lateinit var backtrackValue: TextView
+    private lateinit var playbackVolumeValue: TextView
+    private lateinit var backgroundSelectionValue: TextView
+    private lateinit var panelPauseButton: Button
     private lateinit var backgroundVideoSurface: SurfaceView
     private lateinit var playerScreen: View
     private lateinit var playerStage: View
     private lateinit var reservePanel: View
+    private lateinit var reservePanelHandle: View
     private lateinit var reservePanelScrim: View
     private lateinit var reserveNumberDisplay: TextView
     private lateinit var reserveSongPreview: TextView
@@ -147,6 +152,7 @@ class MainActivity : Activity() {
     private lateinit var playerReserveCount: TextView
     private lateinit var reserveKeypad: View
     private lateinit var reserveTitleSearch: EditText
+    private lateinit var reserveTitleKeyboard: LinearLayout
     private lateinit var reserveTitleResults: ListView
     private lateinit var reserveNumberModeButton: Button
     private lateinit var reserveTitleModeButton: Button
@@ -172,6 +178,7 @@ class MainActivity : Activity() {
     private var isPlaying = false
     private var keyShift = 0
     private var tempoPercent = 100
+    @Volatile private var playbackVolumePercent = 80
     private var micVolumePercent = 50
     private var mediaPlayer: MediaPlayer? = null
     private var backgroundVideoPlayer: MediaPlayer? = null
@@ -200,6 +207,7 @@ class MainActivity : Activity() {
     private var playerTouchDownX = 0f
     private var playerTouchDownY = 0f
     private var reservationTitleMode = false
+    private var reservationPanelOpen = false
     private var playerStageResizeAnimator: ValueAnimator? = null
     private var playerTitleAnimator: ObjectAnimator? = null
     private var activeLibraryFilter = LibraryFilter.ALL
@@ -319,26 +327,32 @@ class MainActivity : Activity() {
         elapsedTime = findViewById(R.id.elapsedTime)
         totalTime = findViewById(R.id.totalTime)
         pauseButton = findViewById(R.id.pauseButton)
-        keyValue = findViewById(R.id.keyValue)
+        keyValue = findViewById(R.id.designKeyValue)
         tempoValue = findViewById(R.id.tempoValue)
         micVolumeValue = findViewById(R.id.micVolumeValue)
+        backtrackValue = findViewById(R.id.designBacktrackValue)
+        playbackVolumeValue = findViewById(R.id.designPlaybackVolumeValue)
+        backgroundSelectionValue = findViewById(R.id.designBackgroundValue)
+        panelPauseButton = findViewById(R.id.designPauseButton)
         backgroundVideoSurface = findViewById(R.id.backgroundVideoSurface)
         playerScreen = findViewById(R.id.playerScreen)
         playerStage = findViewById(R.id.playerStage)
         playerStage.post { updatePlayerSongTitleWidth(playerStage.width) }
         reservePanel = findViewById(R.id.reservePanel)
+        reservePanelHandle = findViewById(R.id.reservePanelHandle)
         reservePanelScrim = findViewById(R.id.reservePanelScrim)
-        reserveNumberDisplay = findViewById(R.id.reserveNumberDisplay)
-        reserveSongPreview = findViewById(R.id.reserveSongPreview)
+        reserveNumberDisplay = findViewById(R.id.designReserveNumberDisplay)
+        reserveSongPreview = findViewById(R.id.designReserveSongPreview)
         playerReserveBadge = findViewById(R.id.playerReserveBadge)
         playerReserveBadge.isSelected = true
         playerReserveCount = findViewById(R.id.playerReserveCount)
-        reserveKeypad = findViewById(R.id.reserveKeypad)
-        reserveTitleSearch = findViewById(R.id.reserveTitleSearch)
-        reserveTitleResults = findViewById(R.id.reserveTitleResults)
-        reserveNumberModeButton = findViewById(R.id.reserveNumberModeButton)
-        reserveTitleModeButton = findViewById(R.id.reserveTitleModeButton)
-        reserveSubmitButton = findViewById(R.id.reserveSubmitButton)
+        reserveKeypad = findViewById(R.id.designReserveKeypad)
+        reserveTitleSearch = findViewById(R.id.designReserveTitleSearch)
+        reserveTitleKeyboard = findViewById(R.id.designReserveTitleKeyboard)
+        reserveTitleResults = findViewById(R.id.designReserveTitleResults)
+        reserveNumberModeButton = findViewById(R.id.designReserveNumberModeButton)
+        reserveTitleModeButton = findViewById(R.id.designReserveTitleModeButton)
+        reserveSubmitButton = findViewById(R.id.designReserveSubmitButton)
         backgroundVideoButton = findViewById(R.id.backgroundVideoButton)
     }
 
@@ -409,31 +423,35 @@ class MainActivity : Activity() {
         val title = TextView(this).apply {
             text = "VIDEO BACKGROUND"
             setTextColor(color(R.color.white))
-            textSize = 15f
+            textSize = 14f
             setTypeface(typeface, Typeface.BOLD)
-            setPadding(dp(18), dp(10), dp(12), dp(8))
+            setPadding(dp(14), dp(7), dp(10), dp(6))
         }
         val selectedPosition = selections.indexOf(backgroundVideoSelection).coerceAtLeast(0)
+        val thumbnailCellHeight = dp(72)
         val adapter = object : BaseAdapter() {
             override fun getCount(): Int = labels.size
             override fun getItem(position: Int): String = labels[position]
             override fun getItemId(position: Int): Long = position.toLong()
 
             override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-                val row = LinearLayout(this@MainActivity).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.CENTER_VERTICAL
+                val cell = LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER
                     layoutParams = AbsListView.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
-                        dp(40)
+                        thumbnailCellHeight
                     )
-                    setPadding(dp(12), dp(4), dp(6), dp(4))
-                    val selectable = android.util.TypedValue()
-                    theme.resolveAttribute(android.R.attr.selectableItemBackground, selectable, true)
-                    setBackgroundResource(selectable.resourceId)
+                    setPadding(dp(3), dp(3), dp(3), dp(2))
+                    setBackgroundResource(R.drawable.bg_video_grid_item)
+                    isActivated = position == selectedPosition
                 }
                 val thumbnail = ImageView(this@MainActivity).apply {
-                    layoutParams = LinearLayout.LayoutParams(dp(56), dp(32))
+                    layoutParams = LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        0,
+                        1f
+                    )
                     scaleType = ImageView.ScaleType.CENTER_CROP
                     setBackgroundColor(color(R.color.night))
                 }
@@ -470,53 +488,67 @@ class MainActivity : Activity() {
                         thumbnail.setColorFilter(color(R.color.cyan))
                     }
                 }
-                row.addView(thumbnail)
-                row.addView(TextView(this@MainActivity).apply {
-                    text = labels[position]
-                    setTextColor(color(R.color.white))
-                    textSize = 12f
-                    maxLines = 1
+                cell.addView(thumbnail)
+                cell.addView(TextView(this@MainActivity).apply {
+                    text = if (position == selectedPosition) "\u2713 ${labels[position]}" else labels[position]
+                    setTextColor(if (position == selectedPosition) color(R.color.cyan) else color(R.color.white))
+                    textSize = 9f
+                    maxLines = 2
                     ellipsize = TextUtils.TruncateAt.END
-                    setPadding(dp(10), 0, dp(4), 0)
-                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
-                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(1), dp(2), dp(1), 0)
+                    layoutParams = LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        dp(21)
+                    )
+                    gravity = Gravity.CENTER
                 })
-                row.addView(RadioButton(this@MainActivity).apply {
-                    isChecked = position == selectedPosition
-                    isClickable = false
-                    isFocusable = false
-                    layoutParams = LinearLayout.LayoutParams(dp(30), ViewGroup.LayoutParams.MATCH_PARENT)
-                })
-                return row
+                return cell
             }
+        }
+        val grid = GridView(this).apply {
+            numColumns = 3
+            horizontalSpacing = dp(4)
+            verticalSpacing = dp(4)
+            stretchMode = GridView.STRETCH_COLUMN_WIDTH
+            setPadding(dp(6), dp(4), dp(6), dp(4))
+            clipToPadding = false
+            this.adapter = adapter
+            val rows = (labels.size + numColumns - 1) / numColumns
+            val desiredHeight = rows * thumbnailCellHeight +
+                (rows - 1).coerceAtLeast(0) * dp(4) + dp(8)
+            val maximumHeight = (resources.displayMetrics.heightPixels * 0.54f).toInt()
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                minOf(desiredHeight, maximumHeight)
+            )
         }
         val dialog = AlertDialog.Builder(this)
             .setCustomTitle(title)
-            .setAdapter(adapter) { dialog, which ->
-                if (selections[which] == VIDEO_SELECTION_CHOOSE_CUSTOM) {
-                    dialog.dismiss()
-                    openCustomBackgroundVideoPicker()
-                    return@setAdapter
-                }
-                backgroundVideoSelection = selections[which]
-                getSharedPreferences(LIBRARY_PREFERENCES, MODE_PRIVATE)
-                    .edit()
-                    .putString(BACKGROUND_VIDEO_KEY, backgroundVideoSelection)
-                    .apply()
-                applyBackgroundVideoSelection()
-                dialog.dismiss()
-            }
+            .setView(grid)
             .setNegativeButton("Close", null)
             .create()
-        dialog.setOnShowListener {
-            val compactWidth = (resources.displayMetrics.widthPixels * 0.42f)
-                .toInt()
-                .coerceIn(dp(300), dp(380))
-            dialog.window?.setLayout(compactWidth, ViewGroup.LayoutParams.WRAP_CONTENT)
-            dialog.listView.apply {
-                dividerHeight = 0
-                setPadding(0, dp(2), 0, dp(2))
+        grid.setOnItemClickListener { _, _, which, _ ->
+            if (selections[which] == VIDEO_SELECTION_CHOOSE_CUSTOM) {
+                dialog.dismiss()
+                openCustomBackgroundVideoPicker()
+                return@setOnItemClickListener
             }
+            backgroundVideoSelection = selections[which]
+            getSharedPreferences(LIBRARY_PREFERENCES, MODE_PRIVATE)
+                .edit()
+                .putString(BACKGROUND_VIDEO_KEY, backgroundVideoSelection)
+                .apply()
+            applyBackgroundVideoSelection()
+            dialog.dismiss()
+        }
+        dialog.setOnShowListener {
+            val screenWidth = resources.displayMetrics.widthPixels
+            val gridWidth = minOf(
+                (screenWidth * 0.46f).toInt(),
+                screenWidth - dp(24),
+                dp(500)
+            )
+            dialog.window?.setLayout(gridWidth, ViewGroup.LayoutParams.WRAP_CONTENT)
             dialog.getButton(AlertDialog.BUTTON_NEGATIVE).apply {
                 minWidth = 0
                 minHeight = 0
@@ -576,7 +608,7 @@ class MainActivity : Activity() {
                 }
                 retriever.getFrameAtTime(1_000_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
                     ?.let { frame ->
-                        Bitmap.createScaledBitmap(frame, dp(112), dp(64), true).also { scaled ->
+                        Bitmap.createScaledBitmap(frame, dp(88), dp(50), true).also { scaled ->
                             if (scaled !== frame) frame.recycle()
                         }
                     }
@@ -643,6 +675,14 @@ class MainActivity : Activity() {
         }
         backgroundVideoButton.text = buttonText
         backgroundVideoButton.contentDescription = "$description. Tap to change."
+        backgroundSelectionValue.text = when {
+            backgroundVideoSelection == VIDEO_SELECTION_AUTO -> "Auto"
+            backgroundVideoSelection == VIDEO_SELECTION_OFF -> "Off"
+            backgroundVideoSelection == VIDEO_SELECTION_CUSTOM -> "Custom"
+            selectedIndex >= 0 -> "Video ${selectedIndex + 1}"
+            else -> "Auto"
+        }
+        findViewById<View>(R.id.designBackgroundControl).contentDescription = "$description. Tap to change."
     }
 
     private fun backgroundVideoLabel(assetName: String): String {
@@ -898,7 +938,9 @@ class MainActivity : Activity() {
         val server = BrowserRemoteServer(
             catalog = catalog.map { RemoteCatalogSong(it.number, it.title, it.artist) },
             port = REMOTE_PORT,
-            statusProvider = { RemoteQueueStatus(publishedQueueSize, remoteQueueLimit) },
+            statusProvider = {
+                RemoteQueueStatus(publishedQueueSize, remoteQueueLimit, playbackVolumePercent)
+            },
             reservationHandler = ::reserveSongFromBrowser,
             controlHandler = ::controlPlaybackFromBrowser
         )
@@ -1007,7 +1049,19 @@ class MainActivity : Activity() {
                             } else {
                                 RemoteControlResult(false, "There is no next song in the queue.")
                             }
-                            else -> RemoteControlResult(false, "Unknown playback control.")
+                            else -> {
+                                val requestedVolume = rawAction
+                                    .takeIf { it.startsWith("volume:") }
+                                    ?.substringAfter(':')
+                                    ?.toIntOrNull()
+                                if (requestedVolume == null) {
+                                    RemoteControlResult(false, "Unknown playback control.")
+                                } else {
+                                    playbackVolumePercent = requestedVolume.coerceIn(0, 100)
+                                    applyPlaybackVolume()
+                                    RemoteControlResult(true, "Music volume set to $playbackVolumePercent%.")
+                                }
+                            }
                         }
                     }
                 )
@@ -1051,6 +1105,43 @@ class MainActivity : Activity() {
             updateMusicControls()
             ensureMicrophoneMonitor()
         }
+        findViewById<View>(R.id.designBackgroundControl).setOnClickListener {
+            showBackgroundVideoDialog()
+        }
+        findViewById<View>(R.id.designBacktrackControl).setOnClickListener {
+            toggleCurrentPlayback()
+        }
+        findViewById<View>(R.id.designKeyControl).apply {
+            setOnClickListener {
+                keyShift = (keyShift + 1).coerceAtMost(12)
+                updateMusicControls()
+            }
+            setOnLongClickListener {
+                keyShift = (keyShift - 1).coerceAtLeast(-12)
+                updateMusicControls()
+                true
+            }
+        }
+        findViewById<Button>(R.id.designRestartButton).setOnClickListener {
+            restartCurrentPlayback()
+        }
+        panelPauseButton.setOnClickListener {
+            toggleCurrentPlayback()
+        }
+        findViewById<Button>(R.id.designFinishButton).setOnClickListener {
+            if (finishCurrentPlayback()) hideReservationPanel(animate = false)
+        }
+        findViewById<View>(R.id.designVolumeControl).apply {
+            setOnClickListener {
+                playbackVolumePercent = if (playbackVolumePercent >= 100) 0 else playbackVolumePercent + 10
+                applyPlaybackVolume()
+            }
+            setOnLongClickListener {
+                playbackVolumePercent = (playbackVolumePercent - 10).coerceAtLeast(0)
+                applyPlaybackVolume()
+                true
+            }
+        }
         songProgress.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(bar: SeekBar?, value: Int, fromUser: Boolean) {
                 if (!fromUser) return
@@ -1079,6 +1170,7 @@ class MainActivity : Activity() {
         isPlaying = true
         pauseButton.text = "Pause"
         startPlayerTitleAnimation()
+        updateMusicControls()
         updatePlaybackUi()
         updateLyrics(0L)
         return true
@@ -1101,6 +1193,7 @@ class MainActivity : Activity() {
             pauseButton.text = "Pause"
             startPlayerTitleAnimation()
         }
+        updateMusicControls()
         return true
     }
 
@@ -1127,17 +1220,19 @@ class MainActivity : Activity() {
     @Suppress("ClickableViewAccessibility")
     private fun wireReservationPanel() {
         val screenWidth = resources.displayMetrics.widthPixels
-        val minimumPanelWidth = minOf(dp(280), (screenWidth * 0.62f).toInt())
+        val minimumPanelWidth = minOf(dp(230), (screenWidth * 0.42f).toInt())
+        val maximumPanelWidth = minOf(dp(360), (screenWidth * 0.42f).toInt())
+            .coerceAtLeast(minimumPanelWidth)
         reservePanel.layoutParams = reservePanel.layoutParams.apply {
-            width = (screenWidth * 0.42f).toInt()
-                .coerceAtLeast(minimumPanelWidth)
-                .coerceAtMost((screenWidth * 0.62f).toInt())
+            width = (screenWidth * 0.29f).toInt().coerceIn(minimumPanelWidth, maximumPanelWidth)
         }
         reserveSearchAdapter = ReserveSearchAdapter()
         reserveTitleResults.adapter = reserveSearchAdapter
         reserveTitleResults.setOnItemClickListener { _, _, position, _ ->
             reserveSearchAdapter.getItem(position)?.let(::reserveSong)
         }
+        reserveTitleSearch.showSoftInputOnFocus = false
+        wireCompactTitleKeyboard()
         reserveTitleSearch.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(text: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(text: CharSequence?, start: Int, before: Int, count: Int) {
@@ -1179,21 +1274,29 @@ class MainActivity : Activity() {
         }
 
         reservePanelScrim.setOnClickListener { hideReservationPanel() }
+        reservePanelHandle.setOnClickListener { showReservationPanel() }
         findViewById<View>(R.id.playerReserveControl).setOnClickListener { showReservationPanel() }
         playerReserveBadge.setOnClickListener { showReservationPanel() }
         findViewById<Button>(R.id.reserveCloseButton).setOnClickListener { hideReservationPanel() }
+        findViewById<View>(R.id.designReserveCloseButton).apply {
+            setOnClickListener { hideReservationPanel() }
+            setOnLongClickListener {
+                showBackgroundVideoDialog()
+                true
+            }
+        }
 
         val digitButtons = intArrayOf(
-            R.id.reserveDigit0,
-            R.id.reserveDigit1,
-            R.id.reserveDigit2,
-            R.id.reserveDigit3,
-            R.id.reserveDigit4,
-            R.id.reserveDigit5,
-            R.id.reserveDigit6,
-            R.id.reserveDigit7,
-            R.id.reserveDigit8,
-            R.id.reserveDigit9
+            R.id.designReserveDigit0,
+            R.id.designReserveDigit1,
+            R.id.designReserveDigit2,
+            R.id.designReserveDigit3,
+            R.id.designReserveDigit4,
+            R.id.designReserveDigit5,
+            R.id.designReserveDigit6,
+            R.id.designReserveDigit7,
+            R.id.designReserveDigit8,
+            R.id.designReserveDigit9
         )
         digitButtons.forEachIndexed { digit, buttonId ->
             findViewById<Button>(buttonId).setOnClickListener {
@@ -1203,11 +1306,11 @@ class MainActivity : Activity() {
                 }
             }
         }
-        findViewById<Button>(R.id.reserveClearButton).setOnClickListener {
+        findViewById<Button>(R.id.designReserveClearButton).setOnClickListener {
             reserveDigits = ""
             updateReservationEntry()
         }
-        findViewById<Button>(R.id.reserveBackspaceButton).setOnClickListener {
+        findViewById<View>(R.id.designReserveBackspaceButton).setOnClickListener {
             if (reserveDigits.isNotEmpty()) reserveDigits = reserveDigits.dropLast(1)
             updateReservationEntry()
         }
@@ -1216,8 +1319,93 @@ class MainActivity : Activity() {
         setReservationMode(titleMode = false)
     }
 
+    private fun wireCompactTitleKeyboard() {
+        val keyboardRows = listOf(
+            "QWERTYUIOP".map { it.toString() to 1f },
+            "ASDFGHJKL".map { it.toString() to 1f },
+            "ZXCVBNM".map { it.toString() to 1f },
+            listOf("Space" to 4f, "Back" to 1.7f, "Clear" to 2f)
+        )
+        keyboardRows.forEach { keys ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    0,
+                    1f
+                )
+            }
+            keys.forEach { (label, weight) ->
+                row.addView(TextView(this).apply {
+                    text = label
+                    setTextColor(Color.WHITE)
+                    textSize = if (label.length == 1) 11f else 9f
+                    gravity = Gravity.CENTER
+                    setTypeface(typeface, Typeface.BOLD)
+                    setPadding(0, 0, 0, 0)
+                    isClickable = true
+                    isFocusable = true
+                    contentDescription = when (label) {
+                        "Back" -> "Backspace"
+                        "Clear" -> "Clear title search"
+                        else -> label
+                    }
+                    setBackgroundResource(
+                        when (label) {
+                            "Space" -> R.drawable.bg_panel_primary
+                            "Clear" -> R.drawable.bg_panel_danger
+                            else -> R.drawable.bg_panel_control
+                        }
+                    )
+                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, weight).apply {
+                        setMargins(dp(1), dp(1), dp(1), dp(1))
+                    }
+                    setOnClickListener {
+                        when (label) {
+                            "Space" -> insertReservationSearchText(" ")
+                            "Back" -> backspaceReservationSearchText()
+                            "Clear" -> reserveTitleSearch.setText("")
+                            else -> insertReservationSearchText(label.lowercase(Locale.ROOT))
+                        }
+                    }
+                })
+            }
+            reserveTitleKeyboard.addView(row)
+        }
+    }
+
+    private fun insertReservationSearchText(value: String) {
+        val editable = reserveTitleSearch.text
+        val selectionStart = reserveTitleSearch.selectionStart.coerceAtLeast(0)
+        val selectionEnd = reserveTitleSearch.selectionEnd.coerceAtLeast(0)
+        val replaceStart = minOf(selectionStart, selectionEnd)
+        val replaceEnd = maxOf(selectionStart, selectionEnd)
+        editable.replace(replaceStart, replaceEnd, value)
+        reserveTitleSearch.setSelection(replaceStart + value.length)
+        reserveTitleSearch.requestFocus()
+    }
+
+    private fun backspaceReservationSearchText() {
+        val editable = reserveTitleSearch.text
+        val selectionStart = reserveTitleSearch.selectionStart.coerceAtLeast(0)
+        val selectionEnd = reserveTitleSearch.selectionEnd.coerceAtLeast(0)
+        val deleteStart = minOf(selectionStart, selectionEnd)
+        val deleteEnd = maxOf(selectionStart, selectionEnd)
+        when {
+            deleteStart != deleteEnd -> editable.delete(deleteStart, deleteEnd)
+            deleteStart > 0 -> editable.delete(deleteStart - 1, deleteStart)
+        }
+        reserveTitleSearch.setSelection(if (deleteStart == deleteEnd) (deleteStart - 1).coerceAtLeast(0) else deleteStart)
+        reserveTitleSearch.requestFocus()
+    }
+
     private fun showReservationPanel() {
         if (reservePanel.visibility == View.VISIBLE) return
+        reservationPanelOpen = true
+        reservePanelHandle.animate().cancel()
+        reservePanelHandle.visibility = View.GONE
+        reservePanelHandle.alpha = 1f
         resizePlayerStageForPanel(panelVisible = true, animate = true)
         reservePanelScrim.animate().cancel()
         reservePanelScrim.visibility = View.VISIBLE
@@ -1238,7 +1426,11 @@ class MainActivity : Activity() {
     }
 
     private fun hideReservationPanel(animate: Boolean = true) {
-        if (reservePanel.visibility != View.VISIBLE) return
+        reservationPanelOpen = false
+        if (reservePanel.visibility != View.VISIBLE) {
+            showReservationPanelHandle(animate = false)
+            return
+        }
         hideReservationKeyboard()
         resizePlayerStageForPanel(panelVisible = false, animate = animate)
         if (!animate) {
@@ -1248,6 +1440,7 @@ class MainActivity : Activity() {
             reservePanel.translationX = 0f
             reservePanelScrim.visibility = View.GONE
             reservePanelScrim.alpha = 1f
+            showReservationPanelHandle(animate = false)
             return
         }
         reservePanelScrim.animate()
@@ -1266,7 +1459,23 @@ class MainActivity : Activity() {
                 reservePanel.visibility = View.GONE
                 reservePanel.alpha = 1f
                 reservePanel.translationX = 0f
+                showReservationPanelHandle(animate = true)
             }
+            .start()
+    }
+
+    private fun showReservationPanelHandle(animate: Boolean) {
+        if (reservationPanelOpen) return
+        reservePanelHandle.animate().cancel()
+        reservePanelHandle.visibility = View.VISIBLE
+        if (!animate) {
+            reservePanelHandle.alpha = 1f
+            return
+        }
+        reservePanelHandle.alpha = 0f
+        reservePanelHandle.animate()
+            .alpha(1f)
+            .setDuration(160L)
             .start()
     }
 
@@ -1303,11 +1512,16 @@ class MainActivity : Activity() {
         reserveNumberDisplay.text = if (reserveDigits.isEmpty()) "------" else reserveDigits
         val song = findReservedSong()
         reserveSongPreview.text = when {
-            reserveDigits.isEmpty() -> "Enter a song number"
-            song == null -> "Song not found"
-            else -> "${song.title} — ${song.artist}"
+            reserveDigits.isEmpty() -> ""
+            song == null -> "No song found for ${reserveDigits.padStart(6, '0')}"
+            else -> "Available: ${song.title}\n${song.artist}"
         }
         reserveSongPreview.setTextColor(if (song == null) color(R.color.muted) else color(R.color.white))
+        reserveSongPreview.visibility = if (!reservationTitleMode && reserveDigits.isNotEmpty()) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
     }
 
     private fun findReservedSong(): Song? {
@@ -1334,42 +1548,47 @@ class MainActivity : Activity() {
         reservationTitleMode = titleMode
         val numberVisibility = if (titleMode) View.GONE else View.VISIBLE
         val titleVisibility = if (titleMode) View.VISIBLE else View.GONE
-        findViewById<View>(R.id.reservationPerformanceControls).visibility = numberVisibility
-        reserveNumberDisplay.visibility = numberVisibility
-        reserveSongPreview.visibility = numberVisibility
+        findViewById<View>(R.id.designPerformanceControls).visibility = numberVisibility
+        findViewById<View>(R.id.designReservationNumberEntry).visibility = numberVisibility
+        reserveSongPreview.visibility = if (!titleMode && reserveDigits.isNotEmpty()) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
         reserveKeypad.visibility = numberVisibility
         reserveSubmitButton.visibility = numberVisibility
         reserveTitleSearch.visibility = titleVisibility
+        reserveTitleKeyboard.visibility = titleVisibility
         reserveTitleResults.visibility = titleVisibility
         reserveNumberModeButton.setBackgroundResource(
-            if (titleMode) R.drawable.bg_panel_control else R.drawable.bg_panel_primary
+            if (titleMode) R.drawable.bg_panel_control else R.drawable.bg_panel_tab_selected
         )
         reserveTitleModeButton.setBackgroundResource(
-            if (titleMode) R.drawable.bg_panel_primary else R.drawable.bg_panel_control
+            if (titleMode) R.drawable.bg_panel_tab_selected else R.drawable.bg_panel_control
         )
+        reserveNumberModeButton.setTextColor(color(if (titleMode) R.color.white else R.color.night))
+        reserveTitleModeButton.setTextColor(color(if (titleMode) R.color.night else R.color.white))
 
-        if (titleMode && reservePanel.visibility == View.VISIBLE) {
-            reserveTitleSearch.requestFocus()
-            reserveTitleSearch.post {
-                (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager)
-                    .showSoftInput(reserveTitleSearch, InputMethodManager.SHOW_IMPLICIT)
-            }
-        } else if (!titleMode) {
+        if (titleMode) {
+            dismissKeyboard(reserveTitleSearch)
+            filterReservationTitles(reserveTitleSearch.text?.toString().orEmpty())
+        } else {
             hideReservationKeyboard()
         }
     }
 
     private fun filterReservationTitles(query: String) {
         val terms = query.trim().lowercase(Locale.ROOT).split(Regex("\\s+")).filter { it.isNotEmpty() }
-        if (terms.isEmpty()) {
-            reserveSearchAdapter.update(emptyList())
-            return
+        val results = if (terms.isEmpty()) {
+            catalog
+        } else {
+            catalog.asSequence()
+                .filter { song -> terms.all { term -> song.searchKey.contains(term) } }
+                .take(MAX_RESERVATION_RESULTS)
+                .toList()
         }
-        val results = catalog.asSequence()
-            .filter { song -> terms.all { term -> song.searchKey.contains(term) } }
-            .take(MAX_RESERVATION_RESULTS)
-            .toList()
         reserveSearchAdapter.update(results)
+        reserveTitleResults.setSelection(0)
     }
 
     private fun reserveSong(song: Song) {
@@ -1378,6 +1597,7 @@ class MainActivity : Activity() {
         showMessage("Reserved ${song.number}: ${song.title}")
         reserveDigits = ""
         reserveTitleSearch.setText("")
+        setReservationMode(titleMode = false)
         updateReservationEntry()
         hideReservationPanel()
     }
@@ -1611,22 +1831,22 @@ class MainActivity : Activity() {
                 setBackgroundResource(R.drawable.bg_home_queue_item)
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    dp(48)
+                    dp(44)
                 ).apply {
-                    bottomMargin = dp(5)
+                    bottomMargin = dp(4)
                 }
             }
             row.addView(simpleText("${index + 1}.  ${song.title}", Color.WHITE, 14f).apply {
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
-                layoutParams = LinearLayout.LayoutParams(0, dp(42), 1f)
+                layoutParams = LinearLayout.LayoutParams(0, dp(38), 1f)
                 gravity = Gravity.CENTER_VERTICAL
                 setOnClickListener { startQueuedSongAt(index) }
             })
             row.addView(simpleText("×", color(R.color.pink), 23f).apply {
                 gravity = Gravity.CENTER
                 setBackgroundResource(R.drawable.bg_home_icon_button)
-                layoutParams = LinearLayout.LayoutParams(dp(42), dp(42))
+                layoutParams = LinearLayout.LayoutParams(dp(38), dp(38))
                 setOnClickListener {
                     queue.removeAt(index)
                     renderQueue()
@@ -1765,12 +1985,14 @@ class MainActivity : Activity() {
             val player = MediaPlayer()
             mediaPlayer = player
             player.setDataSource(cachedMidi.absolutePath)
+            applyPlaybackVolume()
             player.setOnPreparedListener { prepared ->
                 if (mediaPlayer !== prepared) return@setOnPreparedListener
                 currentDurationSeconds = (prepared.duration / 1000).coerceAtLeast(1)
                 totalTime.text = formatTime(currentDurationSeconds)
                 pauseButton.text = "Pause"
                 isPlaying = true
+                updateMusicControls()
                 playbackPositionMs = 0L
                 prepared.start()
                 startPlayerTitleAnimation()
@@ -1797,6 +2019,7 @@ class MainActivity : Activity() {
         nextLyric.text = "Playback unavailable • interface preview continues"
         pauseButton.text = "Pause"
         isPlaying = true
+        updateMusicControls()
         startPlayerTitleAnimation()
         showMessage(message)
     }
@@ -2031,7 +2254,32 @@ class MainActivity : Activity() {
         keyValue.text = keyText
         tempoValue.text = "$tempoPercent%"
         micVolumeValue.text = "$micVolumePercent%"
+        backtrackValue.text = if (isPlaying) "On" else "Off"
+        playbackVolumeValue.text = playbackVolumePercent.toString()
+        panelPauseButton.text = when {
+            pauseButton.text == "Loading…" -> "Loading"
+            currentSong == null || isPlaying -> "Pause"
+            else -> "Resume"
+        }
+        panelPauseButton.setCompoundDrawablesRelativeWithIntrinsicBounds(
+            if (currentSong != null && !isPlaying && pauseButton.text != "Loading…") {
+                R.drawable.ic_panel_play
+            } else {
+                R.drawable.ic_panel_pause
+            },
+            0,
+            0,
+            0
+        )
         micAudioTrack?.setVolume(micVolumePercent / 100f)
+    }
+
+    private fun applyPlaybackVolume() {
+        val volume = playbackVolumePercent / 100f
+        mediaPlayer?.let { player -> runCatching { player.setVolume(volume, volume) } }
+        if (::playbackVolumeValue.isInitialized) {
+            playbackVolumeValue.text = playbackVolumePercent.toString()
+        }
     }
 
     private fun ensureMicrophoneMonitor() {
@@ -2369,12 +2617,12 @@ class MainActivity : Activity() {
                     gravity = Gravity.CENTER_VERTICAL
                     setPadding(dp(12), 0, dp(8), 0)
                     setBackgroundResource(R.drawable.bg_home_row)
-                    layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50))
+                    layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46))
                 }
                 val number = simpleText("", color(R.color.cyan), 15f).apply {
                     gravity = Gravity.CENTER
                     setBackgroundResource(R.drawable.bg_home_number_badge)
-                    layoutParams = LinearLayout.LayoutParams(dp(72), dp(34))
+                    layoutParams = LinearLayout.LayoutParams(dp(68), dp(32))
                     setTypeface(typeface, Typeface.BOLD)
                 }
                 val title = simpleText("", Color.WHITE, 15f).apply {
@@ -2391,14 +2639,14 @@ class MainActivity : Activity() {
                     gravity = Gravity.CENTER
                     isFocusable = false
                     setBackgroundResource(R.drawable.bg_home_icon_button)
-                    layoutParams = LinearLayout.LayoutParams(dp(42), dp(42))
+                    layoutParams = LinearLayout.LayoutParams(dp(38), dp(38))
                 }
                 val add = simpleText("+", Color.WHITE, 24f).apply {
                     gravity = Gravity.CENTER
                     isFocusable = false
                     elevation = dp(3).toFloat()
                     setBackgroundResource(R.drawable.bg_home_add_button)
-                    layoutParams = LinearLayout.LayoutParams(dp(42), dp(42))
+                    layoutParams = LinearLayout.LayoutParams(dp(38), dp(38))
                 }
                 row.addView(number)
                 row.addView(title)

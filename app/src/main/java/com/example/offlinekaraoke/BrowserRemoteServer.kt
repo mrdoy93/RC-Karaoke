@@ -24,7 +24,11 @@ internal data class RemoteCatalogSong(
     val searchKey: String = "$number $title $artist".lowercase(Locale.ROOT)
 }
 
-internal data class RemoteQueueStatus(val queueSize: Int, val queueLimit: Int)
+internal data class RemoteQueueStatus(
+    val queueSize: Int,
+    val queueLimit: Int,
+    val volumePercent: Int
+)
 
 internal data class RemoteReservationResult(val accepted: Boolean, val message: String)
 
@@ -128,6 +132,7 @@ internal class BrowserRemoteServer(
                     val status = statusProvider()
                     result.put("queueSize", status.queueSize)
                     result.put("queueLimit", status.queueLimit)
+                    result.put("volumePercent", status.volumePercent)
                     writeResponse(socket, 200, "application/json; charset=utf-8", result.toString())
                 }
                 request.method == "POST" && path == "/api/reserve" -> {
@@ -139,6 +144,7 @@ internal class BrowserRemoteServer(
                         .put("message", result.message)
                         .put("queueSize", status.queueSize)
                         .put("queueLimit", status.queueLimit)
+                        .put("volumePercent", status.volumePercent)
                         .toString()
                     writeResponse(socket, if (result.accepted) 200 else 409, "application/json; charset=utf-8", json)
                 }
@@ -151,6 +157,7 @@ internal class BrowserRemoteServer(
                         .put("message", result.message)
                         .put("queueSize", status.queueSize)
                         .put("queueLimit", status.queueLimit)
+                        .put("volumePercent", status.volumePercent)
                         .toString()
                     writeResponse(socket, if (result.accepted) 200 else 409, "application/json; charset=utf-8", json)
                 }
@@ -165,6 +172,7 @@ internal class BrowserRemoteServer(
             .put("enabled", running)
             .put("queueSize", status.queueSize)
             .put("queueLimit", status.queueLimit)
+            .put("volumePercent", status.volumePercent)
             .toString()
     }
 
@@ -296,7 +304,7 @@ internal class BrowserRemoteServer(
                 .status{display:flex;justify-content:space-between;gap:10px;align-items:center;background:linear-gradient(135deg,#122343,#17172f);border:1px solid #29436c;border-radius:16px;padding:12px 14px;margin-bottom:14px;box-shadow:0 14px 35px #0006}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#43f0a6;box-shadow:0 0 12px #43f0a6;margin-right:7px}.count{color:var(--cyan);font-weight:800}
                 .search{width:100%;height:54px;border-radius:16px;border:1px solid #36507c;background:#101a31;color:#fff;padding:0 17px;font-size:17px;outline:none;box-shadow:inset 0 0 0 1px #0004}.search:focus{border-color:var(--cyan);box-shadow:0 0 0 3px #32d9ff22}.hint{color:var(--muted);font-size:13px;margin:10px 3px 14px}
                 .songs{display:grid;gap:10px}.song{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:13px;background:linear-gradient(120deg,#111c35,#15172e);border:1px solid #293d62;border-radius:16px}.num{font-size:12px;color:var(--cyan);font-weight:900;background:#0a2940;padding:7px;border-radius:9px}.title{font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.artist{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px}
-                button{border:0;border-radius:12px;color:#fff;font-weight:900;font-size:20px;width:46px;height:46px;background:linear-gradient(135deg,var(--violet),var(--blue));box-shadow:0 8px 20px #3d47e955}button:disabled{opacity:.4}.controls{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:0 0 14px}.control{width:100%;height:46px;padding:0 8px;font-size:13px;white-space:nowrap}.control.finish{background:linear-gradient(135deg,#e03068,#ff4b86)}.message{text-align:center;color:var(--muted);padding:28px 8px}.toast{position:fixed;left:50%;bottom:25px;transform:translateX(-50%) translateY(90px);opacity:0;transition:.25s;background:#14213d;border:1px solid #3c5c8e;border-radius:14px;padding:12px 18px;max-width:90%;text-align:center;box-shadow:0 12px 30px #0009}.toast.show{transform:translateX(-50%) translateY(0);opacity:1}.toast.good{border-color:#38dc9c}.toast.bad{border-color:#ff4b86}
+                button{border:0;border-radius:12px;color:#fff;font-weight:900;font-size:20px;width:46px;height:46px;background:linear-gradient(135deg,var(--violet),var(--blue));box-shadow:0 8px 20px #3d47e955}button:disabled{opacity:.4}.controls{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:0 0 10px}.control{width:100%;height:46px;padding:0 8px;font-size:13px;white-space:nowrap}.control.finish{background:linear-gradient(135deg,#e03068,#ff4b86)}.volume-panel{background:linear-gradient(135deg,#122343,#17172f);border:1px solid #29436c;border-radius:16px;padding:11px 14px 13px;margin:0 0 14px}.volume-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:13px;font-weight:800}.volume-value{color:var(--cyan);font-variant-numeric:tabular-nums}.volume{display:block;width:100%;height:24px;margin:0;accent-color:var(--violet);cursor:pointer}.message{text-align:center;color:var(--muted);padding:28px 8px}.toast{position:fixed;left:50%;bottom:25px;transform:translateX(-50%) translateY(90px);opacity:0;transition:.25s;background:#14213d;border:1px solid #3c5c8e;border-radius:14px;padding:12px 18px;max-width:90%;text-align:center;box-shadow:0 12px 30px #0009}.toast.show{transform:translateX(-50%) translateY(0);opacity:1}.toast.good{border-color:#38dc9c}.toast.bad{border-color:#ff4b86}
                 @media(max-width:440px){.hero{font-size:26px}.controls{grid-template-columns:repeat(2,minmax(0,1fr))}.song{grid-template-columns:auto minmax(0,1fr) auto;padding:11px}.num{font-size:11px;padding:6px 5px}}
               </style>
             </head>
@@ -309,18 +317,23 @@ internal class BrowserRemoteServer(
                 <button class="control finish" data-action="finish">&#9632; Finish</button>
                 <button class="control" data-action="next">Next &#9654;</button>
               </div>
+              <div class="volume-panel">
+                <div class="volume-head"><label for="volume">Music volume</label><output class="volume-value" id="volumeValue" for="volume">100%</output></div>
+                <input class="volume" id="volume" type="range" min="0" max="100" step="5" value="100" aria-label="Music volume">
+              </div>
               <input class="search" id="search" autocomplete="off" placeholder="Song number, title, or artist">
               <div class="hint">Type to search, then tap + to reserve.</div><section class="songs" id="songs"><div class="message">Start typing to find a song.</div></section>
             </main><div class="toast" id="toast"></div>
             <script>
-              const search=document.getElementById('search'),songs=document.getElementById('songs'),count=document.getElementById('count'),toast=document.getElementById('toast');let timer;
-              function status(d){count.textContent='Queue '+d.queueSize+' / '+d.queueLimit}
+              const search=document.getElementById('search'),songs=document.getElementById('songs'),count=document.getElementById('count'),toast=document.getElementById('toast'),volume=document.getElementById('volume'),volumeValue=document.getElementById('volumeValue');let timer,volumeTimer,volumeRequest=0;
+              function status(d){count.textContent='Queue '+d.queueSize+' / '+d.queueLimit;if(Number.isFinite(d.volumePercent)){volume.value=d.volumePercent;volumeValue.textContent=d.volumePercent+'%'}}
               function say(message,good){toast.textContent=message;toast.className='toast show '+(good?'good':'bad');clearTimeout(toast.t);toast.t=setTimeout(()=>toast.className='toast',2800)}
               function empty(message){songs.replaceChildren();const e=document.createElement('div');e.className='message';e.textContent=message;songs.append(e)}
               async function control(action,button){button.disabled=true;try{const response=await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'action='+encodeURIComponent(action)});const data=await response.json();status(data);say(data.message,data.ok)}catch(e){say('The karaoke remote is unavailable.',false)}finally{button.disabled=false}}
+              async function setVolume(value){const request=++volumeRequest;try{const response=await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'action='+encodeURIComponent('volume:'+value)});const data=await response.json();if(request===volumeRequest)status(data);if(!data.ok)say(data.message,false)}catch(e){if(request===volumeRequest)say('Could not change the volume.',false)}}
               function row(song){const card=document.createElement('article');card.className='song';const number=document.createElement('span');number.className='num';number.textContent=song.number;const info=document.createElement('div');const title=document.createElement('div');title.className='title';title.textContent=song.title;const artist=document.createElement('div');artist.className='artist';artist.textContent=song.artist;info.append(title,artist);const add=document.createElement('button');add.textContent='+';add.setAttribute('aria-label','Reserve '+song.title);add.onclick=async()=>{add.disabled=true;try{const response=await fetch('/api/reserve',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'number='+encodeURIComponent(song.number)});const data=await response.json();status(data);say(data.message,data.ok)}catch(e){say('The karaoke remote is unavailable.',false)}finally{add.disabled=false}};card.append(number,info,add);return card}
               async function find(){const q=search.value.trim();if(!q){empty('Start typing to find a song.');return}try{const response=await fetch('/api/search?q='+encodeURIComponent(q));const data=await response.json();status(data);songs.replaceChildren();if(!data.songs.length){empty('No matching songs found.');return}data.songs.forEach(song=>songs.append(row(song)))}catch(e){empty('Connection lost. Check the main karaoke device.')}}
-              document.querySelectorAll('.control').forEach(button=>button.addEventListener('click',()=>control(button.dataset.action,button)));search.addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(find,220)});fetch('/api/status').then(r=>r.json()).then(status).catch(()=>say('Cannot reach the karaoke device.',false));
+              document.querySelectorAll('.control').forEach(button=>button.addEventListener('click',()=>control(button.dataset.action,button)));volume.addEventListener('input',()=>{volumeValue.textContent=volume.value+'%';clearTimeout(volumeTimer);volumeTimer=setTimeout(()=>setVolume(volume.value),100)});search.addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(find,220)});fetch('/api/status').then(r=>r.json()).then(status).catch(()=>say('Cannot reach the karaoke device.',false));
             </script></body></html>
         """.trimIndent()
     }

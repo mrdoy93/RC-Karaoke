@@ -9,4 +9,9 @@ On Search make a small compact keboard only not so wide
 
 On Web based remote Add also a Volume Control
 
- Make the background popup thumbnail 3 Columns
+Reduce the size of background video popup thumbnail 
+
+
+Reduce the height of this button and add a button for restart, Pause and Finish Song also the Vocal button replace it it for the background selection Before and replace also the icon generate Backround Video icon win the same color  
+
+

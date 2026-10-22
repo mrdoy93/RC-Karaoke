@@ -1,0 +1,379 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/reservePanel"
+    android:layout_width="280dp"
+    android:layout_height="match_parent"
+    android:layout_gravity="end"
+    android:background="@drawable/bg_reserve_panel_design"
+    android:clickable="true"
+    android:elevation="18dp"
+    android:focusable="true"
+    android:orientation="vertical"
+    android:paddingStart="10dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="10dp"
+    android:paddingBottom="8dp"
+    android:visibility="gone">
+
+    <LinearLayout
+        android:id="@+id/designPerformanceControls"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="2"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="0.3"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:gravity="start|center_vertical"
+                android:text="PERFORMANCE CONTROLS"
+                android:textColor="@color/muted"
+                android:textSize="9sp" />
+
+            <TextView
+                android:id="@+id/designReserveCloseButton"
+                android:layout_width="32dp"
+                android:layout_height="match_parent"
+                android:background="@android:color/transparent"
+                android:clickable="true"
+                android:contentDescription="Close swipe panel"
+                android:focusable="true"
+                android:gravity="center"
+                android:text="&#x203A;"
+                android:textColor="@color/muted"
+                android:textSize="28sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="0.82"
+            android:baselineAligned="false"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:id="@+id/designBackgroundControl"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginEnd="3dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_panel_tile"
+                android:clickable="true"
+                android:contentDescription="Select background video"
+                android:focusable="true"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:padding="2dp">
+
+                <ImageView android:layout_width="28dp" android:layout_height="0dp" android:layout_weight="1" android:contentDescription="@null" android:padding="3dp" android:src="@drawable/ic_panel_background_video" />
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:text="Background" android:textColor="@color/white" android:textSize="7sp" />
+                <TextView android:id="@+id/designBackgroundValue" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:text="Auto" android:textColor="@color/white" android:textSize="8sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/designBacktrackControl"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="3dp"
+                android:layout_marginEnd="3dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_panel_tile"
+                android:clickable="true"
+                android:contentDescription="Pause or resume backtrack"
+                android:focusable="true"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:padding="2dp">
+
+                <ImageView android:layout_width="28dp" android:layout_height="0dp" android:layout_weight="1" android:contentDescription="@null" android:padding="3dp" android:src="@drawable/ic_panel_music" />
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:text="Backtrack" android:textColor="@color/white" android:textSize="7sp" />
+                <TextView android:id="@+id/designBacktrackValue" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:text="On" android:textColor="@color/white" android:textSize="8sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/designKeyControl"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="3dp"
+                android:layout_marginEnd="3dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_panel_tile"
+                android:clickable="true"
+                android:contentDescription="Change musical key"
+                android:focusable="true"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:padding="2dp">
+
+                <ImageView android:layout_width="28dp" android:layout_height="0dp" android:layout_weight="1" android:contentDescription="@null" android:padding="3dp" android:src="@drawable/ic_panel_tune" />
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:text="Key" android:textColor="@color/white" android:textSize="8sp" />
+                <TextView android:id="@+id/designKeyValue" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:text="0" android:textColor="@color/white" android:textSize="8sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/designVolumeControl"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="3dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_panel_tile"
+                android:clickable="true"
+                android:contentDescription="Change music volume"
+                android:focusable="true"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:padding="2dp">
+
+                <ImageView android:layout_width="28dp" android:layout_height="0dp" android:layout_weight="1" android:contentDescription="@null" android:padding="3dp" android:src="@drawable/ic_panel_volume" />
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:text="Volume" android:textColor="@color/white" android:textSize="8sp" />
+                <TextView android:id="@+id/designPlaybackVolumeValue" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:text="80" android:textColor="@color/white" android:textSize="8sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="5dp"
+            android:layout_weight="0.48"
+            android:baselineAligned="false"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/designRestartButton"
+                style="@style/Button.PanelControl"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginEnd="3dp"
+                android:layout_weight="1"
+                android:drawableStart="@drawable/ic_panel_restart"
+                android:drawablePadding="3dp"
+                android:text="Restart"
+                android:textSize="9sp" />
+
+            <Button
+                android:id="@+id/designPauseButton"
+                style="@style/Button.PanelControl"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="3dp"
+                android:layout_marginEnd="3dp"
+                android:layout_weight="1"
+                android:drawableStart="@drawable/ic_panel_pause"
+                android:drawablePadding="3dp"
+                android:text="Pause"
+                android:textSize="9sp" />
+
+            <Button
+                android:id="@+id/designFinishButton"
+                style="@style/Button.PanelControl"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="3dp"
+                android:layout_weight="1"
+                android:drawableStart="@drawable/ic_panel_finish"
+                android:drawablePadding="3dp"
+                android:text="Finish song"
+                android:textSize="8sp" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="5dp"
+            android:background="#664FCBFF" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="8dp"
+        android:layout_weight="0.65"
+        android:background="@drawable/bg_panel_display"
+        android:orientation="horizontal"
+        android:padding="1dp">
+
+        <Button
+            android:id="@+id/designReserveNumberModeButton"
+            style="@style/Button.PanelControl"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@drawable/bg_panel_tab_selected"
+            android:text="By number"
+            android:textColor="@color/night" />
+
+        <Button
+            android:id="@+id/designReserveTitleModeButton"
+            style="@style/Button.PanelControl"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="1dp"
+            android:layout_weight="1"
+            android:text="By title" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/designReservationNumberEntry"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="6dp"
+        android:layout_weight="0.9"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="0.32"
+            android:gravity="start|center_vertical"
+            android:text="Song number"
+            android:textColor="@color/muted"
+            android:textSize="9sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="0.68"
+            android:background="@drawable/bg_panel_display"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/designReserveNumberDisplay"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:gravity="start|center_vertical"
+                android:paddingStart="9dp"
+                android:text="------"
+                android:textColor="@color/white"
+                android:textSize="18sp" />
+
+            <Button
+                android:id="@+id/designReserveClearButton"
+                style="@style/Button.PanelControl"
+                android:layout_width="38dp"
+                android:layout_height="match_parent"
+                android:background="@android:color/transparent"
+                android:contentDescription="Clear song number"
+                android:text="&#x00D7;"
+                android:textColor="@color/muted"
+                android:textSize="18sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/designReserveSongPreview"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:background="@drawable/bg_panel_section"
+        android:ellipsize="end"
+        android:gravity="start|center_vertical"
+        android:maxLines="2"
+        android:minHeight="44dp"
+        android:paddingStart="9dp"
+        android:paddingTop="5dp"
+        android:paddingEnd="9dp"
+        android:paddingBottom="5dp"
+        android:textColor="@color/white"
+        android:textSize="10sp"
+        android:visibility="gone" />
+
+    <EditText
+        android:id="@+id/designReserveTitleSearch"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="6dp"
+        android:layout_weight="0.7"
+        android:background="@drawable/bg_panel_display"
+        android:hint="Search title or artist"
+        android:imeOptions="actionSearch|flagNoExtractUi"
+        android:inputType="text"
+        android:maxLines="1"
+        android:paddingStart="9dp"
+        android:paddingEnd="9dp"
+        android:singleLine="true"
+        android:textColor="@color/white"
+        android:textColorHint="@color/muted"
+        android:textSize="11sp"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/designReserveTitleKeyboard"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="4dp"
+        android:layout_weight="1.8"
+        android:background="@drawable/bg_panel_section"
+        android:baselineAligned="false"
+        android:orientation="vertical"
+        android:padding="2dp"
+        android:visibility="gone" />
+
+    <ListView
+        android:id="@+id/designReserveTitleResults"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="4dp"
+        android:layout_weight="3.8"
+        android:divider="@color/stroke"
+        android:dividerHeight="1dp"
+        android:fadeScrollbars="false"
+        android:fastScrollEnabled="true"
+        android:overScrollMode="never"
+        android:scrollbars="vertical"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/designReserveKeypad"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="5dp"
+        android:layout_weight="3.1"
+        android:orientation="vertical">
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:orientation="horizontal">
+            <Button android:id="@+id/designReserveDigit1" style="@style/Button.PanelControl" android:layout_width="0dp" android:layout_height="match_parent" android:layout_margin="2dp" android:layout_weight="1" android:text="1" android:textSize="20sp" />
+            <Button android:id="@+id/designReserveDigit2" style="@style/Button.PanelControl" android:layout_width="0dp" android:layout_height="match_parent" android:layout_margin="2dp" android:layout_weight="1" android:text="2" android:textSize="20sp" />
+            <Button android:id="@+id/designReserveDigit3" style="@style/Button.PanelControl" android:layout_width="0dp" android:layout_height="match_parent" android:layout_margin="2dp" android:layout_weight="1" android:text="3" android:textSize="20sp" />
+        </LinearLayout>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:orientation="horizontal">
+            <Button android:id="@+id/designReserveDigit4" style="@style/Button.PanelControl" android:layout_width="0dp" android:layout_height="match_parent" android:layout_margin="2dp" android:layout_weight="1" android:text="4" android:textSize="20sp" />
+            <Button android:id="@+id/designReserveDigit5" style="@style/Button.PanelControl" android:layout_width="0dp" android:layout_height="match_parent" android:layout_margin="2dp" android:layout_weight="1" android:text="5" android:textSize="20sp" />
+            <Button android:id="@+id/designReserveDigit6" style="@style/Button.PanelControl" android:layout_width="0dp" android:layout_height="match_parent" android:layout_margin="2dp" android:layout_weight="1" android:text="6" android:textSize="20sp" />
+        </LinearLayout>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:orientation="horizontal">
+            <Button android:id="@+id/designReserveDigit7" style="@style/Button.PanelControl" android:layout_width="0dp" android:layout_height="match_parent" android:layout_margin="2dp" android:layout_weight="1" android:text="7" android:textSize="20sp" />
+            <Button android:id="@+id/designReserveDigit8" style="@style/Button.PanelControl" android:layout_width="0dp" android:layout_height="match_parent" android:layout_margin="2dp" android:layout_weight="1" android:text="8" android:textSize="20sp" />
+            <Button android:id="@+id/designReserveDigit9" style="@style/Button.PanelControl" android:layout_width="0dp" android:layout_height="match_parent" android:layout_margin="2dp" android:layout_weight="1" android:text="9" android:textSize="20sp" />
+        </LinearLayout>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:orientation="horizontal">
+            <ImageButton android:id="@+id/designReserveBackspaceButton" android:layout_width="0dp" android:layout_height="match_parent" android:layout_margin="2dp" android:layout_weight="1" android:background="@drawable/bg_panel_control" android:contentDescription="Backspace" android:padding="13dp" android:scaleType="fitCenter" android:src="@drawable/ic_panel_backspace" />
+            <Button android:id="@+id/designReserveDigit0" style="@style/Button.PanelControl" android:layout_width="0dp" android:layout_height="match_parent" android:layout_margin="2dp" android:layout_weight="1" android:text="0" android:textSize="20sp" />
+            <Button style="@style/Button.PanelControl" android:layout_width="0dp" android:layout_height="match_parent" android:layout_margin="2dp" android:layout_weight="1" android:clickable="false" android:enabled="false" android:text="" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <Button
+        android:id="@+id/designReserveSubmitButton"
+        style="@style/Button.PanelControl"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="8dp"
+        android:layout_weight="0.75"
+        android:background="@drawable/bg_panel_reserve_action"
+        android:drawableStart="@drawable/ic_panel_queue_add"
+        android:drawablePadding="7dp"
+        android:gravity="center"
+        android:text="Reserve song"
+        android:textColor="@color/night"
+        android:textSize="13sp" />
+</LinearLayout>

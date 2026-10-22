@@ -9,7 +9,7 @@
     </item>
     <item android:gravity="top" android:height="3dp">
         <shape android:shape="rectangle">
-            <gradient android:angle="0" android:startColor="#AFA43CFF" android:endColor="#AF34CFFF" />
+            <gradient android:angle="0" android:startColor="#AF164A7A" android:endColor="#AF2276AE" />
             <corners android:topLeftRadius="17dp" android:topRightRadius="17dp" />
         </shape>
     </item>
